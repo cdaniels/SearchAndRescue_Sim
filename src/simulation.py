@@ -1,15 +1,11 @@
 import numpy as np
-from enum import Enum
-import time
 
-import pygame
-
-from environments import SARGridWorld, default_options
-from agents import ScoutAgent, RescueAgent
+from src.environments import SARGridWorld, default_options
+from src.agents import ScoutAgent, RescueAgent
 
 class Simulation:
-    def __init__(self) -> None:
-        self.grid_world = SARGridWorld(default_options)
+    def __init__(self, env=SARGridWorld(default_options)) -> None:
+        self.grid_world = env
         # dictionary for holding agent classes
         self.agent_dict = dict()
         self.initialize_agents(self.grid_world)

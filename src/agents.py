@@ -1,5 +1,5 @@
 import numpy as np
-from environments import SARGridWorld, default_options
+from src.environments import SARGridWorld, default_options
 
 class Agent:
     def __init__(self) -> None:
@@ -26,16 +26,15 @@ class ScoutAgent(Agent):
 
     #obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     def policy(self, obs):
-        id, agent_locs, victum_loc_suggestions, visited, carrying, goals = obs
+        id, agent_locs, victum_loc_suggestions, visited, comm, carrying, goals = obs
 
         action_visit_counts = self.get_action_visit_counts(agent_locs[id], visited)
-        best_action = self.A[self.random_argmax(action_visit_counts)]
+        best_action = self.A[self.random_argmin(action_visit_counts)]
         return best_action
 
     def get_action_visit_counts(self, loc, visited):
-        movable = self.env.movable_locations
-
         loc = self.env.convert_loc_to_2d(loc)
+        grid_size = self.env.grid_size
 
         left_loc = np.add(loc, [-1,0])
         down_loc = np.add(loc, [0,-1])
@@ -45,13 +44,8 @@ class ScoutAgent(Agent):
         nearby_visits = list()
         for loc_2d in [left_loc, down_loc, up_loc, right_loc]:
             loc_1d = self.env.convert_loc_from_2d(loc_2d[0], loc_2d[1])
-            can_move = False
-            for i, movable_loc in enumerate(movable):
-                if loc_1d == movable_loc:
-                    can_move = True
-                    break
-            if can_move:
-                nearby_visits.append(visited[i])
+            if loc_2d[0] >= 0 and loc_2d[0] < grid_size and loc_2d[1] >= 0 and loc_2d[1] < grid_size:
+                nearby_visits.append(visited[loc_1d])
             else:
                 nearby_visits.append(np.inf)
         return np.array(nearby_visits)
@@ -67,7 +61,7 @@ class RescueAgent(ScoutAgent):
     
     #obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     def policy(self, obs):
-        id, agent_locs, victum_loc_suggestions, visited, carrying, goals = obs
+        id, agent_locs, victum_loc_suggestions, visited, comm, carrying, goals = obs
         loc = agent_locs[id]
         
         possible_victum_locs = np.array([loc for loc in victum_loc_suggestions if loc > 0])
@@ -90,7 +84,7 @@ class RescueAgent(ScoutAgent):
                     best_action = self.random_argmin(action_distances)
         else:
             action_visit_counts = self.get_action_visit_counts(loc, visited)
-            best_action = self.A[self.random_argmax(action_visit_counts)]
+            best_action = self.A[self.random_argmin(action_visit_counts)]
         return best_action
 
 
