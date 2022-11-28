@@ -34,8 +34,8 @@ class SARGridWorld:
         self.movable_locations = np.nonzero(self.world)[0]
         self.agent_location_visits = np.zeros((self.num_agents, len(self.movable_locations)))
         # start and goal locations
-        self.starts = self.movable_locations
-        self.goals = np.array([np.random.choice(self.movable_locations) for _ in range(2)])
+        self.starts = self.movable_locations[0:2]
+        self.goals = self.movable_locations[0:2]
         # array of victum locations at random cells in the world
         self.accident_locations = np.array([np.random.choice(self.movable_locations) for _ in range(4)])
         # self.victum_locations = np.array([np.random.choice(self.movable_locations) for _ in range(self.num_victums)])
@@ -134,15 +134,12 @@ class SARGridWorld:
             case self.Actions.DOWN:
                 dy = +1
             case self.Actions.PICKUP:
-                # reward is -10 for failed pickup
-                reward = -10
-                # check if victum is at same location
-                for vic_i, _ in enumerate(self.victum_locations):
-                    vic_loc = self.get_victum_2d_loc(vic_i)
-                    if np.array_equal(loc, vic_loc):
-                        self.agents_carrying_victum[vic_i] = agent_i
-                        # reward is 10 for successful pickup
-                        reward = 10
+                if self.attempt_agent_pickup(agent_i):
+                    # reward is 10 for successful pickup
+                    reward = 10
+                else:
+                    # reward is -10 for failed pickup
+                    reward = -10
             case self.Actions.DROPOFF:
                 # reward is -10 for failed dropoff
                 reward = -10
@@ -188,6 +185,24 @@ class SARGridWorld:
         obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
         # return the observation, reward, and termitation state
         return obs, reward, done
+    
+    def attempt_agent_pickup(self, agent_i):
+        """make one agent attempt to pikcup a victum
+           if anny are in range
+        Args:
+            agent_i (int): the id of the attempting agent
+        Return:
+            result (bool): whether or not a victum was picked up
+        """
+        # check if victum is at same location
+        loc = self.agent_locations[agent_i]
+        result = False
+        for vic_i, _ in enumerate(self.victum_locations):
+            vic_loc = self.victum_locations[vic_i]
+            if np.array_equal(loc, vic_loc):
+                self.agents_carrying_victum[vic_i] = agent_i
+                result = True
+        return result
 
     def move_agent(self, agent_i, dx, dy, carrying_vic):
         x, y = self.get_agent_2d_loc(agent_i)
