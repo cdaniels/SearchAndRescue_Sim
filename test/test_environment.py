@@ -1,6 +1,6 @@
 
-from MARL_Sim.src import environments    # The code to test
-from MARL_Sim.src.environments import SARGridWorld, default_options
+from src import environments    # The code to test
+from src.environments import SARGridWorld, default_options
 
 
 import unittest   # The test framework
@@ -25,7 +25,8 @@ class Test_Environment(unittest.TestCase):
             'num_agents': np.random.randint(1,20), 
             'num_rescuers': np.random.randint(1,5),
             'visible_range': np.random.randint(1,4),
-            'render_mode': None
+            'render_mode': None,
+            'render_delay': 0 # in seconds
         }
         env = SARGridWorld(options)
 
@@ -314,14 +315,15 @@ class Test_Environment(unittest.TestCase):
         right_act = SARGridWorld.Actions.RIGHT
         # move the agent and get the resultant observation
         obs, _, _ = self.env.step_agent(agent, right_act)
-        id, agent_locs, victum_loc_suggestions, visited, carrying, goals = obs 
+        id, agent_locs, victum_loc_suggestions, visit_log, comm_log, carrying, goals = obs 
         # check that thet observation has the right structure
         # expected_suggestion_size = default_options['num_agents'] * default_options['num_victums']
         expected_suggestion_size = default_options['num_victums']
         self.assertEqual(agent, id)
         self.assertEqual(agent_locs.tolist(), self.env.agent_locations.tolist())
         self.assertEqual(len(victum_loc_suggestions), expected_suggestion_size)
-        self.assertEqual(len(visited), len(self.env.movable_locations))
+        self.assertEqual(len(visit_log), len(self.env.world))
+        self.assertEqual(len(comm_log), default_options['num_agents'])
         self.assertFalse(carrying)
         self.assertEqual(goals.tolist(), self.env.goals.tolist())
 
@@ -354,18 +356,83 @@ class Test_Environment(unittest.TestCase):
         dist = self.env.manhatten_distance(loc1, loc2)
         self.assertEqual(dist, 5)
 
-    # def test_objects_in_range_returns_list_of_agents():
+    def test_victum_outside_range_updates_likely_location(self):
+        # selecting a victum and agent
+        agent = np.random.choice(self.agents)
+        victum = np.random.choice(self.victums)
+        # set the victum just outside the visible range
+        vis_range = default_options['visible_range']
+        self.env.set_agent_2d_loc(agent, 0, 0)
+        self.env.set_victum_2d_loc(victum, vis_range, 0)
+        vic_loc = self.env.victum_locations[victum]
+        # moving still out of range should not update the likely location
+        down_act = SARGridWorld.Actions.DOWN
+        obs, _, _ = self.env.step_agent(agent, down_act)
+        _, _, loc_suggestions, _, _, _, _ = obs 
+        self.assertNotIn(vic_loc, loc_suggestions)
 
-    def test_victum_in_range_updates_likely_location(self):
-        self.assertTrue(False)
+    def test_victum_inside_range_updates_likely_location(self):
+        # selecting a victum and agent
+        agent = np.random.choice(self.agents)
+        victum = np.random.choice(self.victums)
+        # set the victum just outside the visible range
+        vis_range = default_options['visible_range']
+        self.env.set_agent_2d_loc(agent, 0, 0)
+        self.env.set_victum_2d_loc(victum, vis_range, 0)
+        vic_loc = self.env.victum_locations[victum]
+        # moving still out of range should not update the likely location
+        right_act = SARGridWorld.Actions.RIGHT
+        obs, _, _ = self.env.step_agent(agent, right_act)
+        _, _, loc_suggestions, _, _, _, _ = obs 
+        self.assertIn(vic_loc, loc_suggestions)
 
-    def test_agent_movement_updates_location_visit_count(self):
+    def test_agent_movement_updates_visit_count(self):
+        # select an agent
+        agent = np.random.choice(self.agents)
+        # get the initial visit count and set the agents position
+        self.env.set_agent_2d_loc(agent, 0, 0)
+        _, _, _, initial_visited, _, _, _ = self.env.reset_agent(agent)
+        # get the resulting location of the next action and its initial visit count
+        right_act = SARGridWorld.Actions.RIGHT
+        next_loc = self.env.convert_loc_from_2d(1, 0)
+        initial_visit_count = initial_visited[next_loc]
+        # step to the right and get the new visit counts
+        obs, _, _ = self.env.step_agent(agent, right_act)
+        _, _, _, next_visited, _, _, _ = obs 
+        # moving should update the visit count
+        next_visit_count = next_visited[next_loc]
+        self.assertEqual(next_visit_count, initial_visit_count + 1)
+
+    def test_agent_movement_stops_updating_visit_count_at_max(self):
+        # select an agent
+        agent = np.random.choice(self.agents)
+        # get the initial visit count and set the agents position
+        self.env.set_agent_2d_loc(agent, 0, 0)
+        # get the resulting location of the next action and its initial visit count
+        left_act = SARGridWorld.Actions.LEFT
+        right_act = SARGridWorld.Actions.RIGHT
+        next_loc = self.env.convert_loc_from_2d(1, 0)
+        max_count = default_options['max_pheromone']
+        # step to the right and get the new visit counts
+        for _ in range(max_count + 1):
+            self.env.step_agent(agent, right_act)
+            self.env.step_agent(agent, left_act)
+        obs, _, _ = self.env.step_agent(agent, right_act)
+        _, _, _, next_visited, _, _, _ = obs 
+        # moving should update the visit count
+        next_visit_count = next_visited[next_loc]
+        self.assertEqual(next_visit_count, max_count)
+
+    def test_agent_communication_updates_communication_log(self):
         self.assertTrue(False)
 
     def test_agent_communication_exchanges_victum_data(self):
         self.assertTrue(False)
 
     def test_agent_communication_exchanges_visit_data(self):
+        self.assertTrue(False)
+
+    def test_victum_dropoff_at_goal_removes_likely_location(self):
         self.assertTrue(False)
 
 if __name__ == '__main__':
