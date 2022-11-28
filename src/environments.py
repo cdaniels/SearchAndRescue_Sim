@@ -31,6 +31,7 @@ class SARGridWorld:
         self.unpack_options(options)
         # grid representing world 0 wall, 1 movable
         self.world = np.ones((self.grid_size,self.grid_size)).astype(int).flatten()
+        self.world[60:80] = 0
         self.movable_locations = np.nonzero(self.world)[0]
         self.agent_location_visits = np.zeros((self.num_agents, len(self.movable_locations)))
         # start and goal locations
@@ -47,7 +48,7 @@ class SARGridWorld:
         self.scouts = self.agents[np.isin(self.agents, self.rescuers, invert=True)]
         # inter-agent trust network
         self.likely_victum_locations = np.ones((self.num_agents, self.num_victums)).astype(int)*(-1)
-        self.agents_carrying_victum = np.ones((self.num_victums)).astype(int)*(-1)
+        self.agents_carrying_victum = np.ones((self.num_agents)).astype(int)*(-1)
         self.trust_matrix = np.ones((self.num_agents, self.num_agents))
         # initialize pygame if appropriate
         if self.render_mode == 'human':
@@ -83,22 +84,28 @@ class SARGridWorld:
         loc2_2d = self.convert_loc_to_2d(loc2)
         return sum(abs(value1 - value2) for value1, value2 in zip(loc1_2d, loc2_2d))
 
-    def objects_in_range(self, agent_i):
+    def agents_in_range(self, agent_i):
         # get the agent location
         agent_loc = self.agent_locations[agent_i]
-        # test for victums and agents within range then add them to list
+        # test for agents within range then add them to list
         agents_in_range = list()
-        victums_in_range = list()
         for other_i, loc in enumerate(self.agent_locations):
             if other_i != agent_i:
                 dist = self.manhatten_distance(loc, agent_loc)
                 if dist < self.visible_range:
                     agents_in_range.append(other_i)
+        return agents_in_range
+
+    def victums_in_range(self, agent_i):
+        # get the agent location
+        agent_loc = self.agent_locations[agent_i]
+        # test for victums within range then add them to list
+        victums_in_range = list()
         for vic_i, loc in enumerate(self.victum_locations):
             dist = self.manhatten_distance(loc, agent_loc)
             if dist < self.visible_range:
                 victums_in_range.append(vic_i)
-        return agents_in_range, victums_in_range
+        return victums_in_range
 
     def reset_agent(self, agent_i):
         # format observation data
@@ -109,19 +116,8 @@ class SARGridWorld:
         return agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     
     def step_agent(self, agent_i, action):
-        loc = self.get_agent_2d_loc(agent_i)
-        # check for other agents or victums in range
-        agents_in_range, victums_in_range = self.objects_in_range(agent_i)
-        # check for victums being carried by agent
-        carrying_vic = None
-        for vic_i, carrying_agent_i in enumerate(self.agents_carrying_victum):
-            if agent_i == carrying_agent_i:
-                carrying_vic = vic_i
-        # return values to be determined by action
-        obs = np.array([])
         # reward is -1 normally for each timestep
-        reward = -1
-        done = False
+        reward, done = -1, False
         # apply affects for selected action
         dx, dy = 0, 0
         match action:
@@ -135,44 +131,24 @@ class SARGridWorld:
                 dy = +1
             case self.Actions.PICKUP:
                 if self.attempt_agent_pickup(agent_i):
-                    # reward is 10 for successful pickup
-                    reward = 10
+                    reward = 10 # reward is 10 for successful pickup
                 else:
-                    # reward is -10 for failed pickup
-                    reward = -10
+                    reward = -10 # reward is -10 for failed pickup
             case self.Actions.DROPOFF:
-                # reward is -10 for failed dropoff
-                reward = -10
                 # stop carrying victum if victum is being carried
-                if carrying_vic is not None:
-                    self.agents_carrying_victum[carrying_vic] = -1
-                    # reward is 10 for successful dropoff
-                    reward = 10
-                    # end the episode if all victums are in goal zone
-                    done = np.all(np.isin(self.victum_locations, self.goals))
+                if self.attempt_agent_dropoff(agent_i):
+                    reward = 10 # reward is 10 for successful dropoff
+                    done = self.check_termination_condition()
+                else:
+                    reward = -10 # reward is -10 for failed dropoff
             # case self.Actions.COMMUNICATE:
-            # # case 6:
-            #     # no reward for communication
-            #     # reward = 0
-            #     # exchange data with agents in range
-            #     for agent in agents_in_range:
-            #         if agent_i != agent:
-            #             self.likely_victum_locations[agent_i] = self.likely_victum_locations[agent]
-            #             self.agent_location_visits[agent_i] += self.agent_location_visits[agent]
+            #     self.exchange_data_with_agents_in_range(agent_i)
             case _:
                 pass
-        # exchange info automatically
-        for agent in agents_in_range:
-            if agent_i != agent:
-                self.likely_victum_locations[agent_i] = self.likely_victum_locations[agent]
-                # self.agent_location_visits[agent_i] = np.add(self.agent_location_visits[agent_i], self.agent_location_visits[agent])
-
-        # change states for movement if selected
-        self.move_agent(agent_i, dx, dy, carrying_vic)
-        # update data for in range victums
-        for vic in victums_in_range:
-            vic_loc = self.victum_locations[vic]
-            self.likely_victum_locations[agent_i, vic] = vic_loc
+        # update state space for selected action
+        self.move_agent(agent_i, dx, dy)
+        self.update_data_for_victums_in_range(agent_i)
+        self.exchange_data_with_agents_in_range(agent_i)
 
         # draw changes to screen if enabled
         if self.render_mode == 'human':
@@ -181,18 +157,47 @@ class SARGridWorld:
         # format observation data
         suggested_locs = self.likely_victum_locations[agent_i]
         visited_locs = self.agent_location_visits[agent_i]
-        carrying = carrying_vic != None
+        carrying = self.check_agent_carrying_victum(agent_i)
         obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
         # return the observation, reward, and termitation state
         return obs, reward, done
+
+    def update_data_for_victums_in_range(self, agent_i):
+        # check for victums in range
+        victums_in_range = self.victums_in_range(agent_i)
+        for vic in victums_in_range:
+            vic_loc = self.victum_locations[vic]
+            self.likely_victum_locations[agent_i, vic] = vic_loc
+
+    def exchange_data_with_agents_in_range(self, agent_i):
+        # check for other agents in range
+        agents_in_range = self.agents_in_range(agent_i)
+        # exchange info automatically
+        for agent in agents_in_range:
+            if agent_i != agent:
+                self.likely_victum_locations[agent_i] = self.likely_victum_locations[agent]
+                # self.agent_location_visits[agent_i] = np.add(self.agent_location_visits[agent_i], self.agent_location_visits[agent])
+
+    def check_agent_carrying_victum(self, agent_i):
+        carrying_vic = self.agents_carrying_victum[agent_i]
+        # -1 represents no victum
+        return carrying_vic >= 0 
+
+    def check_termination_condition(self):
+        """ Check whether the game's termination condition has been fulfilled
+
+        Returns:
+            (bool): whether or not all victums are in goal
+        """
+        return np.all(np.isin(self.victum_locations, self.goals))
     
     def attempt_agent_pickup(self, agent_i):
-        """make one agent attempt to pikcup a victum
-           if anny are in range
+        """ Make one agent attempt to pikcup a victum if anny are in range
+
         Args:
             agent_i (int): the id of the attempting agent
-        Return:
-            result (bool): whether or not a victum was picked up
+        Returns:
+            (bool): whether or not a victum was picked up
         """
         # check if victum is at same location
         loc = self.agent_locations[agent_i]
@@ -200,11 +205,26 @@ class SARGridWorld:
         for vic_i, _ in enumerate(self.victum_locations):
             vic_loc = self.victum_locations[vic_i]
             if np.array_equal(loc, vic_loc):
-                self.agents_carrying_victum[vic_i] = agent_i
+                self.agents_carrying_victum[agent_i] = vic_i
                 result = True
         return result
 
-    def move_agent(self, agent_i, dx, dy, carrying_vic):
+    def attempt_agent_dropoff(self, agent_i):
+        """make one agent attempt to dropoff a victum
+           if one is being carried
+        Args:
+            agent_i (int): the id of the attempting agent
+        Return:
+            result (bool): whether or not a victum was dropped up
+        """
+        result = False
+        if self.check_agent_carrying_victum(agent_i):
+            # -1 represents no victum
+            self.agents_carrying_victum[agent_i] = -1
+            result = True
+        return result
+
+    def move_agent(self, agent_i, dx, dy):
         x, y = self.get_agent_2d_loc(agent_i)
         new_x = x + dx
         new_y = y + dy
@@ -212,11 +232,16 @@ class SARGridWorld:
         if new_y < 0 or new_y > self.grid_size-1: new_y = y
         new_loc_1d = self.convert_loc_from_2d(new_x, new_y)
         self.set_agent_1d_loc(agent_i, new_loc_1d)
-        if carrying_vic is not None:
+        # move victum if being carried
+        carrying_vic = self.agents_carrying_victum[agent_i]
+        if carrying_vic >= 0:
             self.set_victum_1d_loc(carrying_vic, new_loc_1d)
+        # self.update_map_with_visit(agent_i, new_loc_1d)
+
+    def update_map_with_visit(self, agent_i, loc):
         # update visited map data
-        if self.agent_location_visits[agent_i][new_loc_1d] <= self.max_pheromone:
-            self.agent_location_visits[agent_i][new_loc_1d] += 1
+        if self.agent_location_visits[agent_i][loc] <= self.max_pheromone:
+            self.agent_location_visits[agent_i][loc] += 1
     
     def render_grid(self):
         # fill the display buffor on the screen
