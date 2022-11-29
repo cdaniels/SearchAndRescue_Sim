@@ -239,7 +239,6 @@ class Test_Environment(unittest.TestCase):
         self.assertEqual(vic_loc, drop_loc)
         self.assertNotEqual(vic_loc, agent_loc)
 
-
     def test_reward_for_each_time_step(self):
         agent = np.random.choice(self.agents)
         # make a movement
@@ -256,7 +255,6 @@ class Test_Environment(unittest.TestCase):
         self.assertEqual(reward, -1)
         _, reward, _ = self.env.step_agent(agent, down_act)
         self.assertEqual(reward, -1)
-
     def test_reward_for_successfull_pickup(self):
         agent = np.random.choice(self.agents)
         victum = np.random.choice(self.victums)
@@ -348,7 +346,7 @@ class Test_Environment(unittest.TestCase):
         # pickup the victum and move the agent to a new location
         self.env.step_agent(agent, pick_act)
         _, _, done = self.env.step_agent(agent, drop_act)
-        self.assertEqual(done, True)
+        self.assertTrue(done)
 
     def test_calculates_manhatten_distance_between_locations(self):
         loc1 = self.env.convert_loc_from_2d(0, 2)
@@ -432,8 +430,10 @@ class Test_Environment(unittest.TestCase):
     def test_agent_communication_exchanges_visit_data(self):
         self.assertTrue(False)
 
-    def test_victum_dropoff_at_goal_removes_likely_location(self):
-        self.assertTrue(False)
+    def test_convert_loc_returns_int(self):
+        # convert function should even convert float coordinates to ints
+        loc_1d = self.env.convert_loc_from_2d(0.0, 1.0)
+        self.assertIsInstance(loc_1d, int)
 
 if __name__ == '__main__':
     unittest.main()
