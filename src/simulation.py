@@ -43,6 +43,8 @@ class Simulation:
 
                 # setup the next action for the agent
                 agent_actions[i] = agent.policy(obs)
+                # termination must break the loop or other agents will reset it
+                if(terminated): break
             
 
     # environment must assign rewards to certain joint action state combinations from the network

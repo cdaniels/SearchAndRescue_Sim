@@ -12,7 +12,7 @@ default_options = {
     'num_agents': 5,
     'num_rescuers': 2,
     'num_victums': 1,
-    'visible_range': 2,
+    'visible_range': 1,
     'max_pheromone': 10,
     'render_mode': None,
     'render_delay': 0 # in seconds
