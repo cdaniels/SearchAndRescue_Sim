@@ -68,9 +68,9 @@ class SARGridWorld:
 
     def __del__(self):
         # close pygame if it was opened
-        self.close()
+        self.stop_simulation()
 
-    def close(self):
+    def stop_simulation(self):
         if self.render_mode == 'human':
             pygame.display.quit()
             pygame.quit()
@@ -159,7 +159,7 @@ class SARGridWorld:
                     reward = 10 # reward is 10 for successful dropoff
                     done = self.check_termination_condition()
                     if done:
-                        self.close()
+                        self.stop_simulation()
                 else:
                     reward = -10 # reward is -10 for failed dropoff
             case self.Actions.COMMUNICATE:
@@ -169,20 +169,21 @@ class SARGridWorld:
         # update state space for selected action
         self.move_agent(agent_i, dx, dy)
         self.update_data_for_victums_in_range(agent_i)
-        # self.exchange_data_with_agents_in_range(agent_i)
-
         # draw changes to screen if enabled
         if self.render_mode == 'human':
             self.render_grid()
-
         # format observation data
+        obs = self.get_observation_for_agent(agent_i)
+        # return the observation, reward, and termitation state
+        return obs, reward, done
+
+    def get_observation_for_agent(self, agent_i):
         suggested_locs = self.likely_victum_locations[agent_i]
         visit_log = self.agent_location_visits[agent_i]
         comm_log = self.agent_last_communicated[agent_i]
         carrying = self.check_agent_carrying_victum(agent_i)
         obs = agent_i, self.agent_locations, suggested_locs, visit_log, comm_log, carrying, self.goals
-        # return the observation, reward, and termitation state
-        return obs, reward, done
+        return obs
 
     def update_data_for_victums_in_range(self, agent_i):
         # check for victums in range
