@@ -26,10 +26,9 @@ class Simulation:
             self.agent_dict[j] = agent
         
     def run_simulation(self):
-
         env_agents = self.grid_world.agents
-
         terminated = False
+
         agent_actions = list()
         for i in self.agent_dict:
             obs = self.grid_world.reset_agent(i)

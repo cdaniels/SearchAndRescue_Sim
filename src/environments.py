@@ -71,11 +71,11 @@ class SARGridWorld:
             pygame.quit()
 
     def get_scout_actions(self):
-        return [self.Actions.LEFT, self.Actions.RIGHT, self.Actions.UP, self.Actions.DOWN, self.Actions.COMMUNICATE]
+        return [self.Actions.LEFT, self.Actions.DOWN, self.Actions.UP, self.Actions.RIGHT, self.Actions.COMMUNICATE]
         # return [action.value for action in self.Actions]
         
     def get_rescuer_actions(self):
-        return [self.Actions.LEFT, self.Actions.RIGHT, self.Actions.UP, self.Actions.DOWN, self.Actions.COMMUNICATE, self.Actions.PICKUP, self.Actions.DROPOFF]
+        return [self.Actions.LEFT, self.Actions.DOWN, self.Actions.UP, self.Actions.RIGHT, self.Actions.COMMUNICATE, self.Actions.PICKUP, self.Actions.DROPOFF]
         # return [action.value for action in self.Actions]
         
     def init_pygame(self):
@@ -225,7 +225,7 @@ class SARGridWorld:
         return result
 
     def attempt_agent_dropoff(self, agent_i):
-        """make one agent attempt to dropoff a victum
+        """ Make one agent attempt to dropoff a victum
            if one is being carried
         Args:
             agent_i (int): the id of the attempting agent
@@ -255,7 +255,7 @@ class SARGridWorld:
 
     def update_map_with_visit(self, agent_i, loc):
         # update visited map data
-        if self.agent_location_visits[agent_i][loc] <= self.max_pheromone:
+        if self.agent_location_visits[agent_i][loc] < self.max_pheromone:
             self.agent_location_visits[agent_i][loc] += 1
     
     def render_grid(self):
@@ -266,9 +266,9 @@ class SARGridWorld:
         scale = self.grid2screen
         for space in self.movable_locations:
             x, y = self.convert_loc_to_2d(space)
-            visit_count = visits[space]
+            visit_count = int(visits[space])
             grey_scale = 255
-            if visit_count > 0:
+            if visit_count > 0 and visit_count < 255:
                 grey_scale = 255 - visit_count*10 #(255, 255, 255)
             pygame.draw.rect(self.screen, (grey_scale, grey_scale, grey_scale), pygame.Rect(x*scale, y*scale, scale, scale))
             # pygame.draw.rect(self.screen, WHITE, pygame.Rect(x*scale, y*scale, scale, scale))
@@ -320,10 +320,10 @@ class SARGridWorld:
         return grid_loc_2d
 
     def convert_loc_to_2d(self, loc):
-        x = loc % self.grid_size
-        y = loc // self.grid_size
+        x = int(loc % self.grid_size)
+        y = int(loc // self.grid_size)
         return x, y
 
     def convert_loc_from_2d(self, x, y):
-        loc_1d = y * self.grid_size + x
+        loc_1d = int(y * self.grid_size + x)
         return loc_1d

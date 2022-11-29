@@ -37,22 +37,18 @@ class ScoutAgent(Agent):
         grid_size = self.env.grid_size
 
         left_loc = np.add(loc, [-1,0])
-        down_loc = np.add(loc, [0,-1])
-        up_loc = np.add(loc, [0,1])
+        down_loc = np.add(loc, [0,1])
+        up_loc = np.add(loc, [0,-1])
         right_loc = np.add(loc, [1,0])
 
-        nearby_visits = list()
-        for loc_2d in [left_loc, down_loc, up_loc, right_loc]:
+        nearby_visits = np.zeros(4)
+        for i, loc_2d in enumerate([left_loc, down_loc, up_loc, right_loc]):
             loc_1d = self.env.convert_loc_from_2d(loc_2d[0], loc_2d[1])
             if loc_2d[0] >= 0 and loc_2d[0] < grid_size and loc_2d[1] >= 0 and loc_2d[1] < grid_size:
-                nearby_visits.append(visited[loc_1d])
+                nearby_visits[i] = visited[loc_1d]
             else:
-                nearby_visits.append(np.inf)
+                nearby_visits[i] = 999
         return np.array(nearby_visits)
-
-            
-
-        
 
 class RescueAgent(ScoutAgent):
     def __init__(self, actions=np.arange(0,6), env=None) -> None:
@@ -61,30 +57,29 @@ class RescueAgent(ScoutAgent):
     
     #obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     def policy(self, obs):
-        id, agent_locs, victum_loc_suggestions, visited, comm, carrying, goals = obs
+        id, agent_locs, suggested_locs, visited, comm, carrying, goals = obs
         loc = agent_locs[id]
         
-        possible_victum_locs = np.array([loc for loc in victum_loc_suggestions if loc > 0])
-        if len(possible_victum_locs) > 0:
-            if not carrying:
-                vic_distances = self.get_victum_distances(loc, possible_victum_locs)
+        if carrying:
+            if loc in goals:
+                best_action = self.env.Actions.DROPOFF
+            else:
+                action_distances = self.get_action_distances_to_target(loc, goals[0])
+                best_action = self.A[self.random_argmin(action_distances)]
+        else:
+            possible_locs = np.array([i for i in suggested_locs if (i >= 0 and i not in goals)])
+            if len(possible_locs) > 0:
+                vic_distances = self.get_victum_distances(loc, possible_locs)
                 closest_vic = self.random_argmin(vic_distances)
-                vic_loc = possible_victum_locs[closest_vic]
+                vic_loc = possible_locs[closest_vic]
                 # if the rescuer is at the victum then pick them up
                 if vic_distances[closest_vic] == 0:
                     best_action = self.env.Actions.PICKUP
                 else:
                     action_distances = self.get_action_distances_to_target(loc, vic_loc)
-                    best_action = self.random_argmin(action_distances)
-            else: 
-                if loc in goals:
-                    best_action = self.env.Actions.DROPOFF
-                else:
-                    action_distances = self.get_action_distances_to_target(loc, goals[0])
-                    best_action = self.random_argmin(action_distances)
-        else:
-            action_visit_counts = self.get_action_visit_counts(loc, visited)
-            best_action = self.A[self.random_argmin(action_visit_counts)]
+                    best_action = self.A[self.random_argmin(action_distances)]
+            else:
+                best_action = super().policy(obs)
         return best_action
 
 
@@ -97,28 +92,22 @@ class RescueAgent(ScoutAgent):
 
 
     def get_action_distances_to_target(self, loc, target):
-        movable = self.env.movable_locations
-
         loc = self.env.convert_loc_to_2d(loc)
+        grid_size = self.env.grid_size
 
         left_loc = np.add(loc, [-1,0])
-        down_loc = np.add(loc, [0,-1])
-        up_loc = np.add(loc, [0,1])
+        down_loc = np.add(loc, [0,1])
+        up_loc = np.add(loc, [0,-1])
         right_loc = np.add(loc, [1,0])
 
-        act_distances = list()
-        for loc_2d in [left_loc, down_loc, up_loc, right_loc]:
+        act_distances = np.empty(4)
+        for i, loc_2d in enumerate([left_loc, down_loc, up_loc, right_loc]):
             loc_1d = self.env.convert_loc_from_2d(loc_2d[0], loc_2d[1])
-            can_move = False
-            for i, movable_loc in enumerate(movable):
-                if loc_1d == movable_loc:
-                    can_move = True
-                    break
-            if can_move:
+            if loc_2d[0] >= 0 and loc_2d[0] < grid_size and loc_2d[1] >= 0 and loc_2d[1] < grid_size:
                 dist = self.env.manhatten_distance(loc_1d, target)
-                act_distances.append(dist)
+                act_distances[i] = dist
             else:
-                act_distances.append(np.inf)
+                act_distances[i] = np.inf
         return np.array(act_distances)
 
 
