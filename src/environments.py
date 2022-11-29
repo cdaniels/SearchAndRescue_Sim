@@ -21,6 +21,7 @@ WHITE = (255, 255, 255)
 BLACK = (0,0,0)
 RED = (200,0,0)
 YELLOW = (255, 255, 0)
+PURPLE = (255, 0, 255)
 BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
     
@@ -67,9 +68,13 @@ class SARGridWorld:
 
     def __del__(self):
         # close pygame if it was opened
-        if self.render_mode == 'human':
-            pygame.quit()
+        self.close()
 
+    def close(self):
+        if self.render_mode == 'human':
+            pygame.display.quit()
+            pygame.quit()
+    
     def get_scout_actions(self):
         return [self.Actions.LEFT, self.Actions.DOWN, self.Actions.UP, self.Actions.RIGHT, self.Actions.COMMUNICATE]
         # return [action.value for action in self.Actions]
@@ -153,6 +158,8 @@ class SARGridWorld:
                 if self.attempt_agent_dropoff(agent_i):
                     reward = 10 # reward is 10 for successful dropoff
                     done = self.check_termination_condition()
+                    if done:
+                        self.close()
                 else:
                     reward = -10 # reward is -10 for failed dropoff
             case self.Actions.COMMUNICATE:
@@ -263,35 +270,40 @@ class SARGridWorld:
         self.screen.fill(BLACK)
         # draw the empty spaces
         visits = np.sum(self.agent_location_visits, axis=0)
-        scale = self.grid2screen
         for space in self.movable_locations:
-            x, y = self.convert_loc_to_2d(space)
             visit_count = int(visits[space])
-            grey_scale = 255
-            if visit_count > 0 and visit_count < 255:
-                grey_scale = 255 - visit_count*10 #(255, 255, 255)
-            pygame.draw.rect(self.screen, (grey_scale, grey_scale, grey_scale), pygame.Rect(x*scale, y*scale, scale, scale))
-            # pygame.draw.rect(self.screen, WHITE, pygame.Rect(x*scale, y*scale, scale, scale))
+            grey_color = self.grey_scale_for_visit_count(visit_count)
+            self.draw_color_at_location(grey_color, space)
         # draw the agents, victums, and goals in the display buffer
         for goal in self.goals:
-            x, y = self.convert_loc_to_2d(goal)
-            pygame.draw.rect(self.screen, GREEN, pygame.Rect(x*scale, y*scale, scale, scale))
+            self.draw_color_at_location(GREEN, goal)
         for victum_loc in self.victum_locations:
-            x, y = self.convert_loc_to_2d(victum_loc)
-            pygame.draw.rect(self.screen, RED, pygame.Rect(x*scale, y*scale, scale, scale))
+            self.draw_color_at_location(RED, victum_loc)
         for scout_i in self.scouts:
             loc = self.agent_locations[scout_i]
-            x, y = self.convert_loc_to_2d(loc)
-            pygame.draw.rect(self.screen, YELLOW, pygame.Rect(x*scale, y*scale, scale, scale))
+            self.draw_color_at_location(YELLOW, loc)
         for rescuer_i in self.rescuers:
             loc = self.agent_locations[rescuer_i]
-            x, y = self.convert_loc_to_2d(loc)
-            pygame.draw.rect(self.screen, BLUE, pygame.Rect(x*scale, y*scale, scale, scale))
+            if self.agents_carrying_victum[rescuer_i] >= 0:
+                self.draw_color_at_location(PURPLE, loc)
+            else:
+                self.draw_color_at_location(BLUE, loc)
         # flip the display buffer to make it visible on the screen
         pygame.display.flip()
         # delay so step is clearly visible
         if self.render_delay > 0:
             time.sleep(self.render_delay)
+
+    def grey_scale_for_visit_count(self, visit_count):
+        grey_scale = 255
+        if visit_count > 0 and visit_count < 255:
+            grey_scale = 255 - visit_count*10 
+        return (grey_scale, grey_scale, grey_scale)
+
+    def draw_color_at_location(self, color, loc):
+        scale = self.grid2screen
+        x, y = self.convert_loc_to_2d(loc)
+        pygame.draw.rect(self.screen, color, pygame.Rect(x*scale, y*scale, scale, scale))
 
     def set_agent_1d_loc(self, agent_i, loc):
         self.agent_locations[agent_i] = loc
