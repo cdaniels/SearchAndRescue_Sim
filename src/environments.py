@@ -190,8 +190,6 @@ class SARGridWorld:
                 if self.attempt_agent_dropoff(agent_i):
                     reward = 10 # reward is 10 for successful dropoff
                     done = self.check_termination_condition()
-                    if done:
-                        self.stop_simulation()
                 else:
                     reward = -10 # reward is -10 for failed dropoff
             case self.Actions.COMMUNICATE:

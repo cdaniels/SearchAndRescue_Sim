@@ -45,6 +45,7 @@ class Simulation:
                 agent_actions[i] = agent.policy(obs)
                 # termination must break the loop or other agents will reset it
                 if(terminated): break
+        self.grid_world.stop_simulation()
             
 
     # environment must assign rewards to certain joint action state combinations from the network
