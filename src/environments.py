@@ -3,10 +3,13 @@ from enum import Enum
 import time
 
 import pygame
+import cv2
+from map_factory import ImageGridFactory, SimpleGridFactory
 
 default_options = {
     'screen_size': 100,
     'grid_size': 100,
+    'map_file': None,
     'num_agents': 5,
     'num_rescuers': 2,
     'num_victums': 1,
@@ -24,39 +27,41 @@ YELLOW = (255, 255, 0)
 PURPLE = (255, 0, 255)
 BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
-    
+
+   
+
 class SARGridWorld:
     Actions = Enum('Actions', ['LEFT', 'DOWN', 'UP', 'RIGHT', 'COMMUNICATE', 'PICKUP', 'DROPOFF'])
 
-    def __init__(self, options, map=None) -> None:
+    def __init__(self, options) -> None:
         # unpack the options
         self.unpack_options(options)
-        # by default create a grid world of the appropriate size
-        if map is None:
-            map = self.pad_map(np.ones((self.grid_size,self.grid_size)).astype(int))  
-        self.initialize_world(map.flatten())
+        grid = self.build_grid()
+        self.populate_grid(grid.flatten())
+
         # initialize pygame if appropriate
         if self.render_mode == 'human':
             self.init_pygame()
 
-    def pad_map(self, map_array): 
-        # 0 wall, 1 movable
-        pad_length = self.visible_range
-        map_array[0:pad_length, :] = 0 # left edge
-        map_array[:, 0:pad_length] = 0 # top edge
-        map_array[self.grid_size-pad_length:self.grid_size, :] = 0 # right edge
-        map_array[:, self.grid_size-pad_length:self.grid_size] = 0 # bottom edge
-        return map_array
+    def build_grid(self):
+        # by default create a grid world of the appropriate size
+        grid = np.array([])
+        # grids are loaded with padding equal to the visible range (so that the logic for observable are is cleaner)
+        if self.map_file is not None:
+            grid = ImageGridFactory.load_grid(self.map_file, self.visible_range)
+        else:
+            grid = SimpleGridFactory.load_grid(self.grid_size, self.visible_range)
+        return grid
 
-    def initialize_world(self, map):
+    def populate_grid(self, grid):
         # grid representing world 0 wall, 1 movable
-        self.agent_location_visits = np.zeros((self.num_agents, len(map)))
-        self.location_visits = np.zeros((len(map)))
-        for loc, occupied in enumerate(map):
+        self.agent_location_visits = np.zeros((self.num_agents, len(grid)))
+        self.location_visits = np.zeros((len(grid)))
+        for loc, occupied in enumerate(grid):
             if occupied == 0:
                 self.agent_location_visits[:, loc] = np.inf
                 self.location_visits[loc] = np.inf
-        self.world = map
+        self.world = grid
         self.movable_locations = np.nonzero(self.world)[0]
         # self.agent_location_visits = np.zeros((self.num_agents, len(self.world)))
         # start and goal locations

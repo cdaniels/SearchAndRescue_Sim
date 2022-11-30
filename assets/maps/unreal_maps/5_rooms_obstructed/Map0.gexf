@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='utf-8'?>
+<gexf xmlns="http://www.gexf.net/1.2draft" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.gexf.net/1.2draft http://www.gexf.net/1.2draft/gexf.xsd" version="1.2">
+  <meta lastmodifieddate="2022-09-01">
+    <creator>NetworkX 2.6.3</creator>
+  </meta>
+  <graph defaultedgetype="undirected" mode="static" name="">
+    <nodes>
+      <node id="(54.0, 59.2109375)" label="(54.0, 59.2109375)" />
+      <node id="(86.0, 91.3359375)" label="(86.0, 91.3359375)" />
+      <node id="(117.0, 59.45703125)" label="(117.0, 59.45703125)" />
+      <node id="(94.0, 91.3671875)" label="(94.0, 91.3671875)" />
+      <node id="(142.0, 108.5546875)" label="(142.0, 108.5546875)" />
+      <node id="(177.0, 73.69140625)" label="(177.0, 73.69140625)" />
+      <node id="(54.0, 124.2109375)" label="(54.0, 124.2109375)" />
+      <node id="(148.0, 154.578125)" label="(148.0, 154.578125)" />
+      <node id="(193.0, 129.75390625)" label="(193.0, 129.75390625)" />
+      <node id="(177.0, 161.69140625)" label="(177.0, 161.69140625)" />
+      <node id="(244.0, 135.953125)" label="(244.0, 135.953125)" />
+      <node id="(214.0, 165.8359375)" label="(214.0, 165.8359375)" />
+      <node id="(54.0, 138.2109375)" label="(54.0, 138.2109375)" />
+      <node id="(83.0, 167.32421875)" label="(83.0, 167.32421875)" />
+      <node id="(54.0, 196.2109375)" label="(54.0, 196.2109375)" />
+      <node id="(244.0, 196.953125)" label="(244.0, 196.953125)" />
+    </nodes>
+    <edges>
+      <edge source="(54.0, 59.2109375)" target="(86.0, 91.3359375)" id="0" weight="45.34" />
+      <edge source="(86.0, 91.3359375)" target="(94.0, 91.3671875)" id="1" weight="8.0" />
+      <edge source="(86.0, 91.3359375)" target="(54.0, 124.2109375)" id="2" weight="45.88" />
+      <edge source="(117.0, 59.45703125)" target="(94.0, 91.3671875)" id="3" weight="39.34" />
+      <edge source="(94.0, 91.3671875)" target="(142.0, 108.5546875)" id="4" weight="50.98" />
+      <edge source="(142.0, 108.5546875)" target="(177.0, 73.69140625)" id="5" weight="49.4" />
+      <edge source="(142.0, 108.5546875)" target="(148.0, 154.578125)" id="6" weight="46.41" />
+      <edge source="(148.0, 154.578125)" target="(177.0, 161.69140625)" id="7" weight="29.86" />
+      <edge source="(148.0, 154.578125)" target="(83.0, 167.32421875)" id="8" weight="66.24" />
+      <edge source="(193.0, 129.75390625)" target="(177.0, 161.69140625)" id="9" weight="35.72" />
+      <edge source="(177.0, 161.69140625)" target="(214.0, 165.8359375)" id="10" weight="37.23" />
+      <edge source="(244.0, 135.953125)" target="(214.0, 165.8359375)" id="11" weight="42.34" />
+      <edge source="(214.0, 165.8359375)" target="(244.0, 196.953125)" id="12" weight="43.22" />
+      <edge source="(54.0, 138.2109375)" target="(83.0, 167.32421875)" id="13" weight="41.09" />
+      <edge source="(83.0, 167.32421875)" target="(54.0, 196.2109375)" id="14" weight="40.93" />
+    </edges>
+  </graph>
+</gexf>
