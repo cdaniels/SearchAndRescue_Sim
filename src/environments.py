@@ -31,24 +31,36 @@ class SARGridWorld:
     def __init__(self, options, map=None) -> None:
         # unpack the options
         self.unpack_options(options)
-        # grid representing world 0 wall, 1 movable
-        map = np.ones((self.grid_size,self.grid_size)).astype(int).flatten()
-        # map[60:65] = 0
-        # map[70:75] = 0
-        self.initialize_world(map)
+        # by default create a grid world of the appropriate size
+        if map is None:
+            map = self.pad_map(np.ones((self.grid_size,self.grid_size)).astype(int))  
+        self.initialize_world(map.flatten())
         # initialize pygame if appropriate
         if self.render_mode == 'human':
             self.init_pygame()
 
+    def pad_map(self, map_array): 
+        # 0 wall, 1 movable
+        pad_length = self.visible_range
+        map_array[0:pad_length, :] = 0 # left edge
+        map_array[:, 0:pad_length] = 0 # top edge
+        map_array[self.grid_size-pad_length:self.grid_size, :] = 0 # right edge
+        map_array[:, self.grid_size-pad_length:self.grid_size] = 0 # bottom edge
+        return map_array
+
     def initialize_world(self, map):
         # grid representing world 0 wall, 1 movable
+        self.agent_location_visits = np.zeros((self.num_agents, len(map)))
+        self.location_visits = np.zeros((len(map)))
+        for loc, occupied in enumerate(map):
+            if occupied == 0:
+                self.agent_location_visits[:, loc] = np.inf
+                self.location_visits[loc] = np.inf
         self.world = map
         self.movable_locations = np.nonzero(self.world)[0]
-        self.agent_location_visits = np.ones((self.num_agents, len(self.world)))*(np.inf)
         # self.agent_location_visits = np.zeros((self.num_agents, len(self.world)))
-        self.agent_last_communicated = np.zeros((self.num_agents, self.num_agents))
         # start and goal locations
-        self.starts = self.movable_locations[0:50]
+        self.starts = self.movable_locations[0:5]
         self.goals = self.movable_locations[-3:-1]
         # array of victum locations at random cells in the world
         self.accident_locations = np.array([np.random.choice(self.movable_locations) for _ in range(4)])
@@ -119,9 +131,25 @@ class SARGridWorld:
         victums_in_range = list()
         for vic_i, loc in enumerate(self.victum_locations):
             dist = self.manhatten_distance(loc, agent_loc)
-            if dist < self.visible_range:
+            if dist <= self.visible_range:
                 victums_in_range.append(vic_i)
         return victums_in_range
+
+    def cells_in_range(self, agent_i):
+        # get the agent location
+        agent_loc = self.agent_locations[agent_i]
+        # test for cells within range then add them to list
+        cells_in_range = list()
+        for loc, occupied in enumerate(self.world):
+            dist = self.manhatten_distance(loc, agent_loc)
+            if dist <= self.visible_range:
+                cells_in_range.append(loc)
+        return cells_in_range
+
+    def cell_visits_in_range(self, agent_i):
+        cells = self.cells_in_range(agent_i)
+        visits = np.array([self.location_visits[loc] for loc in cells])
+        return visits
 
     def reset_agent(self, agent_i):
         for space in self.movable_locations:
@@ -129,10 +157,9 @@ class SARGridWorld:
         # format observation data
         suggested_locs = self.likely_victum_locations[agent_i]
         visited_locs = self.agent_location_visits[agent_i]
-        comm_log = self.agent_last_communicated[agent_i]
         carrying = False
         # return the initial observation data
-        return agent_i, self.agent_locations, suggested_locs, visited_locs, comm_log, carrying, self.goals
+        return agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     
     def step_agent(self, agent_i, action):
         # reward is -1 normally for each timestep
@@ -179,10 +206,9 @@ class SARGridWorld:
 
     def get_observation_for_agent(self, agent_i):
         suggested_locs = self.likely_victum_locations[agent_i]
-        visit_log = self.agent_location_visits[agent_i]
-        comm_log = self.agent_last_communicated[agent_i]
+        visit_log = self.cell_visits_in_range(agent_i)
         carrying = self.check_agent_carrying_victum(agent_i)
-        obs = agent_i, self.agent_locations, suggested_locs, visit_log, comm_log, carrying, self.goals
+        obs = agent_i, self.agent_locations, suggested_locs, visit_log, carrying, self.goals
         return obs
 
     def update_data_for_victums_in_range(self, agent_i):
@@ -265,14 +291,15 @@ class SARGridWorld:
         # update visited map data
         if self.agent_location_visits[agent_i][loc] < self.max_pheromone:
             self.agent_location_visits[agent_i][loc] += 1
+        # sum all the visits for a global value
+        self.location_visits = np.sum(self.agent_location_visits, axis=0)
     
     def render_grid(self):
         # fill the display buffor on the screen
         self.screen.fill(BLACK)
         # draw the empty spaces
-        visits = np.sum(self.agent_location_visits, axis=0)
         for space in self.movable_locations:
-            visit_count = int(visits[space])
+            visit_count = int(self.location_visits[space])
             grey_color = self.grey_scale_for_visit_count(visit_count)
             self.draw_color_at_location(grey_color, space)
         # draw the agents, victums, and goals in the display buffer

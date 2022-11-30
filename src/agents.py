@@ -1,3 +1,5 @@
+
+import math
 import numpy as np
 from src.environments import SARGridWorld, default_options
 
@@ -26,29 +28,28 @@ class ScoutAgent(Agent):
 
     #obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     def policy(self, obs):
-        id, agent_locs, victum_loc_suggestions, visited, comm, carrying, goals = obs
+        id, agent_locs, victum_loc_suggestions, visited, carrying, goals = obs
 
-        action_visit_counts = self.get_action_visit_counts(agent_locs[id], visited)
+        action_visit_counts = self.get_action_visit_counts(visited)
         best_action = self.A[self.random_argmin(action_visit_counts)]
         return best_action
 
-    def get_action_visit_counts(self, loc, visited):
-        loc = self.env.convert_loc_to_2d(loc)
-        grid_size = self.env.grid_size
-
-        left_loc = np.add(loc, [-1,0])
-        down_loc = np.add(loc, [0,1])
-        up_loc = np.add(loc, [0,-1])
-        right_loc = np.add(loc, [1,0])
-
-        nearby_visits = np.zeros(4)
-        for i, loc_2d in enumerate([left_loc, down_loc, up_loc, right_loc]):
-            loc_1d = self.env.convert_loc_from_2d(loc_2d[0], loc_2d[1])
-            if loc_2d[0] >= 0 and loc_2d[0] < grid_size and loc_2d[1] >= 0 and loc_2d[1] < grid_size:
-                nearby_visits[i] = visited[loc_1d]
-            else:
-                nearby_visits[i] = 999
-        return np.array(nearby_visits)
+    def get_action_visit_counts(self, visited):
+        # for vis_range 2, agent pos is at index 6 in visible range
+        #         0
+        #     1   2   3
+        # 4   5   6   7  8
+        #     9  10  11
+        #        12
+        # left, down, up, right
+        size_of_range = len(visited)
+        center = size_of_range // 2
+        left = center - 1
+        right = center + 1
+        down = center + math.ceil(size_of_range / 4)
+        up = center - math.ceil(size_of_range / 4)
+        nearby_visits = np.array([visited[left], visited[down], visited[up], visited[right]])
+        return nearby_visits
 
 class RescueAgent(ScoutAgent):
     def __init__(self, actions=np.arange(0,6), env=None) -> None:
@@ -57,7 +58,7 @@ class RescueAgent(ScoutAgent):
     
     #obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     def policy(self, obs):
-        id, agent_locs, suggested_locs, visited, comm, carrying, goals = obs
+        id, agent_locs, suggested_locs, visited, carrying, goals = obs
         loc = agent_locs[id]
         
         if carrying:

@@ -39,7 +39,7 @@ class Test_Environment(unittest.TestCase):
     def test_initializes_grid_with_correct_size(self):
         grid_size = default_options['grid_size']
         world = self.env.world
-        self.assertEquals(len(world), grid_size*grid_size)
+        self.assertEqual(len(world), grid_size*grid_size)
 
         
     def test_initializes_starting_locations_in_movable_position_in_world(self):
@@ -65,7 +65,7 @@ class Test_Environment(unittest.TestCase):
     def test_initializes_certain_agents_as_rescuers(self):
         num_rescuers = default_options['num_rescuers']
         rescuers = self.env.rescuers
-        self.assertEquals(len(rescuers), num_rescuers)
+        self.assertEqual(len(rescuers), num_rescuers)
         for agent in rescuers:
             self.assertIn(agent, self.agents)
 
@@ -73,7 +73,7 @@ class Test_Environment(unittest.TestCase):
         num_rescuers = default_options['num_rescuers']
         num_scouts = default_options['num_agents'] - num_rescuers
         scouts = self.env.scouts
-        self.assertEquals(len(scouts), num_scouts)
+        self.assertEqual(len(scouts), num_scouts)
         for agent in scouts:
             self.assertIn(agent, self.agents)
 
@@ -104,7 +104,7 @@ class Test_Environment(unittest.TestCase):
         self.env.step_agent(agent, act)
         # agent should be in same location after step
         next_loc = self.env.get_agent_2d_loc(agent)
-        self.assertEquals(x, next_loc[0])
+        self.assertEqual(x, next_loc[0])
 
     def test_agent_right_action_moves_right_normally(self):
         act = SARGridWorld.Actions.RIGHT
@@ -113,9 +113,9 @@ class Test_Environment(unittest.TestCase):
         self.env.step_agent(agent, act)
         next_loc = self.env.get_agent_2d_loc(agent)
         if initial_loc[0] != self.env.grid_size-1:
-            self.assertEquals(initial_loc[0] + 1, next_loc[0])
+            self.assertEqual(initial_loc[0] + 1, next_loc[0])
         else:
-            self.assertEquals(initial_loc[0], next_loc[0])
+            self.assertEqual(initial_loc[0], next_loc[0])
 
     def test_agent_right_action_stops_at_boundary(self):
         act = SARGridWorld.Actions.RIGHT
@@ -127,7 +127,7 @@ class Test_Environment(unittest.TestCase):
         self.env.step_agent(agent, act)
         # agent should be in same location after step
         next_loc = self.env.get_agent_2d_loc(agent)
-        self.assertEquals(x, next_loc[0])
+        self.assertEqual(x, next_loc[0])
 
     def test_agent_up_action_moves_up_normally(self):
         act = SARGridWorld.Actions.UP
@@ -150,7 +150,7 @@ class Test_Environment(unittest.TestCase):
         self.env.step_agent(agent, act)
         # agent should be in same location after step
         next_loc = self.env.get_agent_2d_loc(agent)
-        self.assertEquals(y, next_loc[1])
+        self.assertEqual(y, next_loc[1])
 
     def test_agent_down_action_moves_down_normally(self):
         act = SARGridWorld.Actions.DOWN
@@ -159,9 +159,9 @@ class Test_Environment(unittest.TestCase):
         self.env.step_agent(agent, act)
         next_loc = self.env.get_agent_2d_loc(agent)
         if initial_loc[1] != self.env.grid_size-1:
-            self.assertEquals(initial_loc[1] + 1, next_loc[1])
+            self.assertEqual(initial_loc[1] + 1, next_loc[1])
         else:
-            self.assertEquals(initial_loc[1], next_loc[1])
+            self.assertEqual(initial_loc[1], next_loc[1])
 
     def test_agent_down_action_stops_at_boundary(self):
         act = SARGridWorld.Actions.DOWN
@@ -173,7 +173,7 @@ class Test_Environment(unittest.TestCase):
         self.env.step_agent(agent, act)
         # agent should be in same location after step
         next_loc = self.env.get_agent_2d_loc(agent)
-        self.assertEquals(y, next_loc[1])
+        self.assertEqual(y, next_loc[1])
 
     def test_agent_move_actions_form_cycles(self):
         # move the agent in a circle
@@ -313,17 +313,35 @@ class Test_Environment(unittest.TestCase):
         right_act = SARGridWorld.Actions.RIGHT
         # move the agent and get the resultant observation
         obs, _, _ = self.env.step_agent(agent, right_act)
-        id, agent_locs, victum_loc_suggestions, visit_log, comm_log, carrying, goals = obs 
+        id, agent_locs, victum_loc_suggestions, visit_log, carrying, goals = obs 
         # check that thet observation has the right structure
         # expected_suggestion_size = default_options['num_agents'] * default_options['num_victums']
         expected_suggestion_size = default_options['num_victums']
         self.assertEqual(agent, id)
         self.assertEqual(agent_locs.tolist(), self.env.agent_locations.tolist())
         self.assertEqual(len(victum_loc_suggestions), expected_suggestion_size)
-        self.assertEqual(len(visit_log), len(self.env.world))
-        self.assertEqual(len(comm_log), default_options['num_agents'])
         self.assertFalse(carrying)
         self.assertEqual(goals.tolist(), self.env.goals.tolist())
+
+    def test_agent_observation_cell_visits_have_propper_range(self):
+        # give the environment a set visible range
+        vis_range = np.random.randint(0, 4)
+        custom_options = default_options.copy()
+        custom_options['visible_range'] = vis_range
+        env = SARGridWorld(custom_options)
+        agent = np.random.choice(env.agents)
+
+        # manhatten distance range size
+        # 4, 12, 28, ...
+        # 4, (n-1)+8, (n-1)+16, ...
+        expected_manhatten_range = 1 + np.sum(np.array([2**(n+1) for n in range(1, vis_range+1)]))
+        right_act = SARGridWorld.Actions.RIGHT
+        # move the agent and get the resultant observation
+        obs, _, _ = env.step_agent(agent, right_act)
+        id, agent_locs, victum_loc_suggestions, visit_log, carrying, goals = obs 
+        # check that the observed cell visits have the right size
+        self.assertEqual(len(visit_log), expected_manhatten_range)
+
 
     def test_game_doesnt_terminate_when_victums_not_at_goal(self):
         agent = np.random.choice(self.agents)
@@ -366,7 +384,7 @@ class Test_Environment(unittest.TestCase):
         # moving still out of range should not update the likely location
         down_act = SARGridWorld.Actions.DOWN
         obs, _, _ = self.env.step_agent(agent, down_act)
-        _, _, loc_suggestions, _, _, _, _ = obs 
+        _, _, loc_suggestions, _, _, _ = obs 
         self.assertNotIn(vic_loc, loc_suggestions)
 
     def test_victum_inside_range_updates_likely_location(self):
@@ -381,7 +399,7 @@ class Test_Environment(unittest.TestCase):
         # moving still out of range should not update the likely location
         right_act = SARGridWorld.Actions.RIGHT
         obs, _, _ = self.env.step_agent(agent, right_act)
-        _, _, loc_suggestions, _, _, _, _ = obs 
+        _, _, loc_suggestions, _, _, _ = obs 
         self.assertIn(vic_loc, loc_suggestions)
 
     def test_agent_movement_updates_visit_count(self):
@@ -389,36 +407,45 @@ class Test_Environment(unittest.TestCase):
         agent = np.random.choice(self.agents)
         # get the initial visit count and set the agents position
         self.env.set_agent_2d_loc(agent, 0, 0)
-        _, _, _, initial_visited, _, _, _ = self.env.reset_agent(agent)
+        _, _, _, initial_visited, _, _ = self.env.reset_agent(agent)
         # get the resulting location of the next action and its initial visit count
         right_act = SARGridWorld.Actions.RIGHT
         next_loc = self.env.convert_loc_from_2d(1, 0)
         initial_visit_count = initial_visited[next_loc]
         # step to the right and get the new visit counts
         obs, _, _ = self.env.step_agent(agent, right_act)
-        _, _, _, next_visited, _, _, _ = obs 
+        _, _, _, next_visited, _, _ = obs 
         # moving should update the visit count
         next_visit_count = next_visited[next_loc]
         self.assertEqual(next_visit_count, initial_visit_count + 1)
 
     def test_agent_movement_stops_updating_visit_count_at_max(self):
         # select an agent
-        agent = np.random.choice(self.agents)
+        custom_options = default_options.copy()
+        custom_options['visible_range'] = 2
+        env = SARGridWorld(custom_options)
+        agent = np.random.choice(env.agents)
         # get the initial visit count and set the agents position
-        self.env.set_agent_2d_loc(agent, 0, 0)
+        env.set_agent_2d_loc(agent, 3, 3)
         # get the resulting location of the next action and its initial visit count
         left_act = SARGridWorld.Actions.LEFT
         right_act = SARGridWorld.Actions.RIGHT
-        next_loc = self.env.convert_loc_from_2d(1, 0)
         max_count = default_options['max_pheromone']
         # step to the right and get the new visit counts
+        # for vis_range 2, agent pos is at index 6 in visible range
+        #         0
+        #     1   2   3
+        # 4   5   6   7  8
+        #     9  10  11
+        #        12
         for _ in range(max_count + 1):
-            self.env.step_agent(agent, right_act)
-            self.env.step_agent(agent, left_act)
-        obs, _, _ = self.env.step_agent(agent, right_act)
-        _, _, _, next_visited, _, _, _ = obs 
+            env.step_agent(agent, right_act)
+            env.step_agent(agent, left_act)
+        obs, _, _ = env.step_agent(agent, right_act)
+        _, _, _, next_visited, _, _ = obs 
         # moving should update the visit count
-        next_visit_count = next_visited[next_loc]
+        next_loc_index = 6
+        next_visit_count = next_visited[next_loc_index]
         self.assertEqual(next_visit_count, max_count)
 
     def test_agent_communication_updates_communication_log(self):
