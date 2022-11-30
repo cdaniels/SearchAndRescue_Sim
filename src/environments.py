@@ -3,8 +3,8 @@ from enum import Enum
 import time
 
 import pygame
-import cv2
-from map_factory import ImageGridFactory, SimpleGridFactory
+import math
+from src.map_factory import ImageGridFactory, SimpleGridFactory
 
 default_options = {
     'screen_size': 100,
@@ -65,7 +65,7 @@ class SARGridWorld:
         self.movable_locations = np.nonzero(self.world)[0]
         # self.agent_location_visits = np.zeros((self.num_agents, len(self.world)))
         # start and goal locations
-        self.starts = self.movable_locations[0:5]
+        self.starts = self.movable_locations
         self.goals = self.movable_locations[-3:-1]
         # array of victum locations at random cells in the world
         self.accident_locations = np.array([np.random.choice(self.movable_locations) for _ in range(4)])
@@ -104,7 +104,7 @@ class SARGridWorld:
         # setup screen
         pygame.init()
         self.grid2screen = self.screen_size / self.grid_size
-        self.screen = pygame.display.set_mode((self.screen_size, self.screen_size))
+        self.screen = pygame.display.set_mode((self.screen_size * 2, self.screen_size))
         pygame.display.set_caption('Grid World')
 
     def unpack_options(self, options):
@@ -201,7 +201,7 @@ class SARGridWorld:
         self.update_data_for_victums_in_range(agent_i)
         # draw changes to screen if enabled
         if self.render_mode == 'human':
-            self.render_grid()
+            self.render()
         # format observation data
         obs = self.get_observation_for_agent(agent_i)
         # return the observation, reward, and termitation state
@@ -297,6 +297,11 @@ class SARGridWorld:
         # sum all the visits for a global value
         self.location_visits = np.sum(self.agent_location_visits, axis=0)
     
+    def render(self):
+        self.render_grid()
+        self.render_perception_data()
+        self.update_screen()
+    
     def render_grid(self):
         # fill the display buffor on the screen
         self.screen.fill(BLACK)
@@ -304,21 +309,59 @@ class SARGridWorld:
         for space in self.movable_locations:
             visit_count = int(self.location_visits[space])
             grey_color = self.grey_scale_for_visit_count(visit_count)
-            self.draw_color_at_location(grey_color, space)
+            self.draw_color_at_cell(grey_color, space)
         # draw the agents, victums, and goals in the display buffer
         for goal in self.goals:
-            self.draw_color_at_location(GREEN, goal)
+            self.draw_color_at_cell(GREEN, goal)
         for victum_loc in self.victum_locations:
-            self.draw_color_at_location(RED, victum_loc)
+            self.draw_color_at_cell(RED, victum_loc)
         for scout_i in self.scouts:
             loc = self.agent_locations[scout_i]
-            self.draw_color_at_location(YELLOW, loc)
+            self.draw_color_at_cell(YELLOW, loc)
         for rescuer_i in self.rescuers:
             loc = self.agent_locations[rescuer_i]
             if self.agents_carrying_victum[rescuer_i] >= 0:
-                self.draw_color_at_location(PURPLE, loc)
+                self.draw_color_at_cell(PURPLE, loc)
             else:
-                self.draw_color_at_location(BLUE, loc)
+                self.draw_color_at_cell(BLUE, loc)
+        
+    def render_perception_data(self):
+        block_size = 100
+        for i, agent in enumerate(self.agents):
+            known_victum_locations = self.likely_victum_locations[agent]
+            visible_area = self.cell_visits_in_range(agent)
+            x_offset = 25 + self.screen_size + (i*block_size) % (self.screen_size)
+            y_offset = 100 + block_size * (i*block_size // (self.screen_size))
+            self.draw_text_at_position(str(known_victum_locations), x_offset, y_offset)
+            # self.draw_text_at_position(str(visit_range), x_offset, y_offset + 50)
+            self.draw_observed_area(visible_area, x_offset, y_offset + 20)
+    
+    def get_row_sizes_for_visible_range(self, vis_range):
+        row_sizes = np.array([1])
+        if vis_range > 0:
+            row_sizes = np.array([(2*n+1) for n in range(0, vis_range + 1)])
+            row_sizes = np.append(row_sizes, np.flip(row_sizes[0:-1]))
+        return row_sizes
+        
+    def draw_observed_area(self, visible_area, x, y):
+        # self.draw_text_at_position(str(visible_area), x, y + 50)
+        scale = 10
+        start = 0
+        end = 0
+        row_sizes = self.get_row_sizes_for_visible_range(self.visible_range)
+        for i, row_size in enumerate(row_sizes):
+            end = end + row_size
+            cell_row = visible_area[start:end]
+            x_shift = (row_size-1) // 2
+            self.draw_cell_row(cell_row, x-(x_shift*scale), y+(i*scale), scale)
+            start = end
+
+    def draw_cell_row(self, cells, x, y, scale):
+        for i, cell_visits in enumerate(cells):
+            color = self.grey_scale_for_visit_count(cell_visits)
+            self.draw_color_square_at_position(color, scale, x+(i*scale), y)
+        
+    def update_screen(self):
         # flip the display buffer to make it visible on the screen
         pygame.display.flip()
         # delay so step is clearly visible
@@ -331,10 +374,31 @@ class SARGridWorld:
             grey_scale = 255 - visit_count*10 
         return (grey_scale, grey_scale, grey_scale)
 
-    def draw_color_at_location(self, color, loc):
+    def draw_color_at_cell(self, color, loc):
+        padding = 0
         scale = self.grid2screen
         x, y = self.convert_loc_to_2d(loc)
-        pygame.draw.rect(self.screen, color, pygame.Rect(x*scale, y*scale, scale, scale))
+        # scale the x,= values to the screen size
+        x *= scale
+        y *= scale
+        # shift the x value to the grid location
+        x += padding
+        # draw the square
+        self.draw_color_square_at_position(color, scale, x, y)
+
+    def draw_color_square_at_position(self, color, length: int, x: int, y: int):
+        square = pygame.Rect(x, y, length, length)
+        pygame.draw.rect(self.screen, color, square)
+
+    def draw_text_at_position(self, text: str, x: int, y: int):
+        # create a text surface object,
+        font = pygame.font.Font('freesansbold.ttf', 15)
+        text = font.render(text, True, GREEN, BLACK)
+        textRect = text.get_rect()
+        textRect.center = x, y
+        # draw the text to the screen
+        self.screen.blit(text, textRect)
+
 
     def set_agent_1d_loc(self, agent_i, loc):
         self.agent_locations[agent_i] = loc

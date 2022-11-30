@@ -9,6 +9,7 @@ import numpy as np
 default_options =  {
     'screen_size': 10,
     'grid_size': 10,
+    'map_file': None,
     'num_agents': 5,
     'num_rescuers': 2,
     'num_victums': 1,
