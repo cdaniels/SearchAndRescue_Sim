@@ -13,7 +13,8 @@ default_options = {
     'num_agents': 5,
     'num_rescuers': 2,
     'num_victums': 1,
-    'visible_range': 2,
+    'scout_visible_range': 2,
+    'rescuer_visible_range': 1,
     'max_pheromone': 10,
     'render_mode': None,
     'render_delay': 0 # in seconds
@@ -48,9 +49,9 @@ class SARGridWorld:
         grid = np.array([])
         # grids are loaded with padding equal to the visible range (so that the logic for observable are is cleaner)
         if self.map_file is not None:
-            grid = ImageGridFactory.load_grid(self.map_file, self.visible_range)
+            grid = ImageGridFactory.load_grid(self.map_file, self.scout_visible_range)
         else:
-            grid = SimpleGridFactory.load_grid(self.grid_size, self.visible_range)
+            grid = SimpleGridFactory.load_grid(self.grid_size, self.scout_visible_range)
         return grid
 
     def populate_grid(self, grid):
@@ -118,26 +119,27 @@ class SARGridWorld:
         return sum(abs(value1 - value2) for value1, value2 in zip(loc1_2d, loc2_2d))
 
     def agents_in_range(self, agent_i):
-        # get the agent location
-        agent_loc = self.agent_locations[agent_i]
         # test for agents within range then add them to list
+        cells = self.cells_in_range(agent_i)
         agents_in_range = list()
-        for other_i, loc in enumerate(self.agent_locations):
-            if other_i != agent_i:
-                dist = self.manhatten_distance(loc, agent_loc)
-                if dist < self.visible_range:
-                    agents_in_range.append(other_i)
-        return agents_in_range
+        for cell in cells:
+            for other_i, loc in enumerate(self.agent_locations):
+                if loc == cell: agents_in_range.append(other_i)
+        return  agents_in_range
+
+    def is_agent_rescuer(self, agent_i):
+        return agent_i in self.rescuers
+
+    def is_agent_scout(self, agent_i):
+        return agent_i in self.scouts
 
     def victums_in_range(self, agent_i):
-        # get the agent location
-        agent_loc = self.agent_locations[agent_i]
         # test for victums within range then add them to list
+        cells = self.cells_in_range(agent_i)
         victums_in_range = list()
-        for vic_i, loc in enumerate(self.victum_locations):
-            dist = self.manhatten_distance(loc, agent_loc)
-            if dist <= self.visible_range:
-                victums_in_range.append(vic_i)
+        for cell in cells:
+            for vic_i, loc in enumerate(self.victum_locations):
+                if loc == cell: victums_in_range.append(vic_i)
         return victums_in_range
 
     def cells_in_range(self, agent_i):
@@ -145,9 +147,10 @@ class SARGridWorld:
         agent_loc = self.agent_locations[agent_i]
         # test for cells within range then add them to list
         cells_in_range = list()
+        visible_range = self.rescuer_visible_range if agent_i in self.rescuers else self.scout_visible_range
         for loc, occupied in enumerate(self.world):
             dist = self.manhatten_distance(loc, agent_loc)
-            if dist <= self.visible_range:
+            if dist <= visible_range:
                 cells_in_range.append(loc)
         return cells_in_range
 
@@ -242,7 +245,7 @@ class SARGridWorld:
             (bool): whether or not all victums are in goal
         """
         return np.all(np.isin(self.victum_locations, self.goals))
-    
+   
     def attempt_agent_pickup(self, agent_i):
         """ Make one agent attempt to pikcup a victum if anny are in range
 
@@ -326,15 +329,23 @@ class SARGridWorld:
                 self.draw_color_at_cell(BLUE, loc)
         
     def render_perception_data(self):
+        i = 0
+        for scout in self.scouts:
+            self.render_agent_perception_at_index(scout, i)
+            i += 1
+        for rescuer in self.rescuers:
+            self.render_agent_perception_at_index(rescuer, i)
+            i += 1
+
+    def render_agent_perception_at_index(self, agent_i, i):
         block_size = 100
-        for i, agent in enumerate(self.agents):
-            known_victum_locations = self.likely_victum_locations[agent]
-            visible_area = self.cell_visits_in_range(agent)
-            x_offset = 25 + self.screen_size + (i*block_size) % (self.screen_size)
-            y_offset = 100 + block_size * (i*block_size // (self.screen_size))
-            self.draw_text_at_position(str(known_victum_locations), x_offset, y_offset)
-            # self.draw_text_at_position(str(visit_range), x_offset, y_offset + 50)
-            self.draw_observed_area(visible_area, x_offset, y_offset + 20)
+        known_victum_locations = self.likely_victum_locations[agent_i]
+        x_offset = 25 + self.screen_size + (i*block_size) % (self.screen_size)
+        y_offset = 100 + block_size * (i*block_size // (self.screen_size))
+        self.draw_text_at_position(str(known_victum_locations), x_offset, y_offset)
+        # self.draw_text_at_position(str(visit_range), x_offset, y_offset + 50)
+        self.draw_observed_area(agent_i, x_offset, y_offset + 20)
+        
     
     def get_row_sizes_for_visible_range(self, vis_range):
         row_sizes = np.array([1])
@@ -343,12 +354,15 @@ class SARGridWorld:
             row_sizes = np.append(row_sizes, np.flip(row_sizes[0:-1]))
         return row_sizes
         
-    def draw_observed_area(self, visible_area, x, y):
+    def draw_observed_area(self, agent, x, y):
         # self.draw_text_at_position(str(visible_area), x, y + 50)
+
+        visible_range = self.rescuer_visible_range if agent in self.rescuers else self.scout_visible_range
+        visible_area = self.cell_visits_in_range(agent)
         scale = 10
         start = 0
         end = 0
-        row_sizes = self.get_row_sizes_for_visible_range(self.visible_range)
+        row_sizes = self.get_row_sizes_for_visible_range(visible_range)
         for i, row_size in enumerate(row_sizes):
             end = end + row_size
             cell_row = visible_area[start:end]

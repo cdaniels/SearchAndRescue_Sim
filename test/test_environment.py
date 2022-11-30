@@ -11,6 +11,8 @@ class Test_Environment(unittest.TestCase):
     def setUp(self) -> None:
         self.env = SARGridWorld(default_options)
         self.agents = np.arange(0, len(self.env.agent_locations))
+        self.scouts = np.arange(0, len(self.env.scouts))
+        self.rescuers = np.arange(0, len(self.env.rescuers))
         self.victums = np.arange(0, len(self.env.victum_locations))
         return super().setUp()
 
@@ -21,10 +23,12 @@ class Test_Environment(unittest.TestCase):
         options = {
             'screen_size': np.random.randint(200, 1000),
             'grid_size': np.random.randint(50, 200),
+            'map_file': None,
             'num_victums': np.random.randint(1,20),
             'num_agents': np.random.randint(1,20), 
             'num_rescuers': np.random.randint(1,5),
-            'visible_range': np.random.randint(1,4),
+            'scout_visible_range': np.random.randint(2,4),
+            'rescuer_visible_range': 1,
             'render_mode': None,
             'render_delay': 0 # in seconds
         }
@@ -323,13 +327,33 @@ class Test_Environment(unittest.TestCase):
         self.assertFalse(carrying)
         self.assertEqual(goals.tolist(), self.env.goals.tolist())
 
-    def test_agent_observation_cell_visits_have_propper_range(self):
+    def test_scout_observation_cell_visits_have_propper_range(self):
         # give the environment a set visible range
         vis_range = np.random.randint(0, 4)
         custom_options = default_options.copy()
-        custom_options['visible_range'] = vis_range
+        custom_options['scout_visible_range'] = vis_range
         env = SARGridWorld(custom_options)
-        agent = np.random.choice(env.agents)
+        agent = np.random.choice(env.scouts)
+        self.env.set_agent_2d_loc(agent, 4, 4)
+
+        # manhatten distance range size
+        # 4, 12, 28, ...
+        # 4, (n-1)+8, (n-1)+16, ...
+        expected_manhatten_range = 1 + np.sum(np.array([2**(n+1) for n in range(1, vis_range+1)]))
+        right_act = SARGridWorld.Actions.RIGHT
+        # move the agent and get the resultant observation
+        obs, _, _ = env.step_agent(agent, right_act)
+        id, agent_locs, victum_loc_suggestions, visit_log, carrying, goals = obs 
+        # check that the observed cell visits have the right size
+        self.assertEqual(len(visit_log), expected_manhatten_range)
+
+    def test_rescuer_observation_cell_visits_have_propper_range(self):
+        # give the environment a set visible range
+        vis_range = np.random.randint(0, 4)
+        custom_options = default_options.copy()
+        custom_options['rescuer_visible_range'] = vis_range
+        env = SARGridWorld(custom_options)
+        agent = np.random.choice(env.rescuers)
 
         # manhatten distance range size
         # 4, 12, 28, ...
@@ -374,10 +398,10 @@ class Test_Environment(unittest.TestCase):
 
     def test_victum_outside_range_updates_likely_location(self):
         # selecting a victum and agent
-        agent = np.random.choice(self.agents)
+        agent = np.random.choice(self.scouts)
         victum = np.random.choice(self.victums)
         # set the victum just outside the visible range
-        vis_range = default_options['visible_range']
+        vis_range = default_options['scout_visible_range']
         self.env.set_agent_2d_loc(agent, 0, 0)
         self.env.set_victum_2d_loc(victum, vis_range, 0)
         vic_loc = self.env.victum_locations[victum]
@@ -389,12 +413,14 @@ class Test_Environment(unittest.TestCase):
 
     def test_victum_inside_range_updates_likely_location(self):
         # selecting a victum and agent
-        agent = np.random.choice(self.agents)
+        agent = np.random.choice(self.scouts)
         victum = np.random.choice(self.victums)
         # set the victum just outside the visible range
-        vis_range = default_options['visible_range']
-        self.env.set_agent_2d_loc(agent, 0, 0)
-        self.env.set_victum_2d_loc(victum, vis_range, 0)
+        vis_range = self.env.scout_visible_range
+        x = 3
+        y = 3
+        self.env.set_agent_2d_loc(agent, x, y)
+        self.env.set_victum_2d_loc(victum, x + (vis_range-1), y)
         vic_loc = self.env.victum_locations[victum]
         # moving still out of range should not update the likely location
         right_act = SARGridWorld.Actions.RIGHT
@@ -422,7 +448,7 @@ class Test_Environment(unittest.TestCase):
     def test_agent_movement_stops_updating_visit_count_at_max(self):
         # select an agent
         custom_options = default_options.copy()
-        custom_options['visible_range'] = 2
+        custom_options['scout_visible_range'] = 2
         env = SARGridWorld(custom_options)
         agent = np.random.choice(env.agents)
         # get the initial visit count and set the agents position
