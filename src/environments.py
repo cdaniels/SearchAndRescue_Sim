@@ -75,10 +75,11 @@ class SARGridWorld:
         self.agent_locations = np.array([np.random.choice(self.starts) for _ in range(self.num_agents)])
         # simple arrays for rescuers and scouts
         self.agents = np.arange(0, self.num_agents)
-        self.rescuers = np.array([np.random.choice(self.agents) for _ in range(self.num_rescuers)])
-        self.scouts = self.agents[np.isin(self.agents, self.rescuers, invert=True)]
+        self.rescuers = self.agents[:self.num_rescuers]
+        self.scouts = self.agents[self.num_rescuers:]
         # inter-agent trust network
-        self.likely_victum_locations = np.ones((self.num_agents, self.num_victums)).astype(int)*(-1)
+        self.known_agent_locations = np.ones((self.num_agents, self.num_agents)).astype(int)*(-1)
+        self.known_victum_locations = np.ones((self.num_agents, self.num_victums)).astype(int)*(-1)
         self.agents_carrying_victum = np.ones((self.num_agents)).astype(int)*(-1)
         # self.trust_matrix = np.ones((self.num_agents, self.num_agents))
         for agent in self.agents:
@@ -105,7 +106,7 @@ class SARGridWorld:
         # setup screen
         pygame.init()
         self.grid2screen = self.screen_size / self.grid_size
-        self.screen = pygame.display.set_mode((self.screen_size * 2, self.screen_size))
+        self.screen = pygame.display.set_mode((self.screen_size * 2.5, self.screen_size))
         pygame.display.set_caption('Grid World')
 
     def unpack_options(self, options):
@@ -163,7 +164,7 @@ class SARGridWorld:
         for space in self.movable_locations:
             self.agent_location_visits[agent_i][space] = 0
         # format observation data
-        suggested_locs = self.likely_victum_locations[agent_i]
+        suggested_locs = self.known_victum_locations[agent_i]
         visited_locs = self.agent_location_visits[agent_i]
         carrying = False
         # return the initial observation data
@@ -201,6 +202,7 @@ class SARGridWorld:
                 pass
         # update state space for selected action
         self.move_agent(agent_i, dx, dy)
+        self.update_data_for_agents_in_range(agent_i)
         self.update_data_for_victums_in_range(agent_i)
         # draw changes to screen if enabled
         if self.render_mode == 'human':
@@ -211,10 +213,11 @@ class SARGridWorld:
         return obs, reward, done
 
     def get_observation_for_agent(self, agent_i):
-        suggested_locs = self.likely_victum_locations[agent_i]
+        known_victum_locs = self.known_victum_locations[agent_i]
+        known_agent_locs = self.known_agent_locations[agent_i]
         visit_log = self.cell_visits_in_range(agent_i)
         carrying = self.check_agent_carrying_victum(agent_i)
-        obs = agent_i, self.agent_locations, suggested_locs, visit_log, carrying, self.goals
+        obs = agent_i, known_agent_locs, known_victum_locs, visit_log, carrying, self.goals
         return obs
 
     def update_data_for_victums_in_range(self, agent_i):
@@ -222,7 +225,14 @@ class SARGridWorld:
         victums_in_range = self.victums_in_range(agent_i)
         for vic in victums_in_range:
             vic_loc = self.victum_locations[vic]
-            self.likely_victum_locations[agent_i, vic] = vic_loc
+            self.known_victum_locations[agent_i, vic] = vic_loc
+
+    def update_data_for_agents_in_range(self, agent_i):
+        # check for agents in range
+        agents_in_range = self.agents_in_range(agent_i)
+        for agent in agents_in_range:
+            agent_loc = self.agent_locations[agent]
+            self.known_agent_locations[agent_i, agent] = agent_loc
 
     def exchange_data_with_agents_in_range(self, agent_i):
         # check for other agents in range
@@ -230,7 +240,7 @@ class SARGridWorld:
         # exchange info automatically
         for agent in agents_in_range:
             if agent_i != agent:
-                self.likely_victum_locations[agent_i] = self.likely_victum_locations[agent]
+                self.known_victum_locations[agent_i] = self.known_victum_locations[agent]
                 # self.agent_location_visits[agent_i] = np.add(self.agent_location_visits[agent_i], self.agent_location_visits[agent])
 
     def check_agent_carrying_victum(self, agent_i):
@@ -338,13 +348,17 @@ class SARGridWorld:
             i += 1
 
     def render_agent_perception_at_index(self, agent_i, i):
-        block_size = 100
-        known_victum_locations = self.likely_victum_locations[agent_i]
-        x_offset = 25 + self.screen_size + (i*block_size) % (self.screen_size)
-        y_offset = 100 + block_size * (i*block_size // (self.screen_size))
-        self.draw_text_at_position(str(known_victum_locations), x_offset, y_offset)
-        # self.draw_text_at_position(str(visit_range), x_offset, y_offset + 50)
-        self.draw_observed_area(agent_i, x_offset, y_offset + 20)
+        x_block_size = 200
+        y_block_size = 100
+        known_agent_locations = self.known_agent_locations[agent_i]
+        known_victum_locations = self.known_victum_locations[agent_i]
+        x_margin = 100
+        y_margin = 50
+        x_offset = x_margin + self.screen_size + ((i*x_block_size) % (self.screen_size))
+        y_offset = y_margin + y_block_size * (i*y_block_size // (self.screen_size))
+        self.draw_text_at_position(str(known_agent_locations), x_offset, y_offset)
+        self.draw_text_at_position(str(known_victum_locations), x_offset, y_offset + 20)
+        self.draw_observed_area(agent_i, x_offset, y_offset + 40)
         
     
     def get_row_sizes_for_visible_range(self, vis_range):
@@ -355,8 +369,6 @@ class SARGridWorld:
         return row_sizes
         
     def draw_observed_area(self, agent, x, y):
-        # self.draw_text_at_position(str(visible_area), x, y + 50)
-
         visible_range = self.rescuer_visible_range if agent in self.rescuers else self.scout_visible_range
         visible_area = self.cell_visits_in_range(agent)
         scale = 10
@@ -406,7 +418,7 @@ class SARGridWorld:
 
     def draw_text_at_position(self, text: str, x: int, y: int):
         # create a text surface object,
-        font = pygame.font.Font('freesansbold.ttf', 15)
+        font = pygame.font.Font('freesansbold.ttf', 10)
         text = font.render(text, True, GREEN, BLACK)
         textRect = text.get_rect()
         textRect.center = x, y

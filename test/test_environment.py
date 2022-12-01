@@ -320,10 +320,11 @@ class Test_Environment(unittest.TestCase):
         id, agent_locs, victum_loc_suggestions, visit_log, carrying, goals = obs 
         # check that thet observation has the right structure
         # expected_suggestion_size = default_options['num_agents'] * default_options['num_victums']
-        expected_suggestion_size = default_options['num_victums']
+        expected_known_victum_num = default_options['num_victums']
+        expected_known_agent_num = default_options['num_agents']
         self.assertEqual(agent, id)
-        self.assertEqual(agent_locs.tolist(), self.env.agent_locations.tolist())
-        self.assertEqual(len(victum_loc_suggestions), expected_suggestion_size)
+        self.assertEqual(len(agent_locs), expected_known_agent_num)
+        self.assertEqual(len(victum_loc_suggestions), expected_known_victum_num)
         self.assertFalse(carrying)
         self.assertEqual(goals.tolist(), self.env.goals.tolist())
 
@@ -395,6 +396,39 @@ class Test_Environment(unittest.TestCase):
         loc2 = self.env.convert_loc_from_2d(3, 0)
         dist = self.env.manhatten_distance(loc1, loc2)
         self.assertEqual(dist, 5)
+
+    def test_agent_outside_range_updates_likely_location(self):
+        # selecting a victum and agent
+        agent = np.random.choice(self.scouts)
+        other = np.random.choice(self.rescuers)
+        # set the other agent just outside the visible range
+        vis_range = default_options['scout_visible_range']
+        self.env.set_agent_2d_loc(agent, 3, 3)
+        self.env.set_agent_2d_loc(other, vis_range+1, 3)
+        other_loc = self.env.agent_locations[other]
+        # moving still out of range should not update the likely location
+        down_act = SARGridWorld.Actions.DOWN
+        obs, _, _ = self.env.step_agent(agent, down_act)
+        _, known_agent_locs, _, _, _, _ = obs 
+        self.assertNotIn(other_loc, known_agent_locs)
+
+    def test_agent_inside_range_updates_likely_location(self):
+        # selecting a victum and agent
+        agent = np.random.choice(self.scouts)
+        other = np.random.choice(self.rescuers)
+        # set the agent just outside the visible range
+        vis_range = self.env.scout_visible_range
+        x = 3
+        y = 3
+        self.env.set_agent_2d_loc(agent, x, y)
+        self.env.set_agent_2d_loc(other, x + (vis_range-1), y)
+        other_loc = self.env.agent_locations[other]
+        # moving still out of range should not update the likely location
+        right_act = SARGridWorld.Actions.RIGHT
+        obs, _, _ = self.env.step_agent(agent, right_act)
+        _, known_agent_locs, _, _, _, _ = obs 
+        self.assertIn(other_loc, known_agent_locs)
+
 
     def test_victum_outside_range_updates_likely_location(self):
         # selecting a victum and agent
