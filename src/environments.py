@@ -20,6 +20,15 @@ default_options = {
     'render_delay': 0 # in seconds
 }
 
+"""
+TODO (extract class from render code)
+TODO (extract class from perception data)
+TODO (extract class from specific grid code)
+TODO (refactor render class to use visitor pattern on grid and perception)
+TODO add descriptions to each class/function
+TODO implement adjustable scout and rescuer speeds
+"""
+
 # color
 WHITE = (255, 255, 255)
 BLACK = (0,0,0)
