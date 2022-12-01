@@ -36,6 +36,7 @@ class Test_ScoutAgent(unittest.TestCase):
             'agent_id': 0,
             'agent_locs': np.zeros(default_options['num_agents']),
             'victum_locs': np.ones(default_options['num_victums'])*(-1),
+            'last_comms': np.zeros(default_options['num_agents']),
             'map_visits': np.array([
                     1,
                 1,  1,  1,
@@ -68,10 +69,35 @@ class Test_ScoutAgent(unittest.TestCase):
         self.assertEqual(suggested_act, self.env.Actions.DOWN)
 
     def test_policy_communicates_with_agent_in_range_if_no_recent_comm(self):
-        self.assertTrue(False)
+        agent_id = 0
+        other_id = 1
+        current_timestep = np.random.randint(0, 5)
+        time_diff = 20
+        obs_dict = self.obs_dict.copy()
+        obs_dict['agent_id'] = agent_id
+        obs_dict['agent_locs'][agent_id] = self.env.convert_loc_from_2d(3, 3)
+        obs_dict['agent_locs'][other_id] = self.env.convert_loc_from_2d(4, 3)
+        obs_dict['last_comms'] = np.zeros(default_options['num_agents'])
+        obs_dict['last_comms'][agent_id] = current_timestep + time_diff
+        obs_dict['last_comms'][other_id] = current_timestep
+        obs = tuple(list(obs_dict.values()))
+        suggested_act = self.agent.policy(obs)
+        self.assertEqual(suggested_act, self.env.Actions.COMMUNICATE)
 
     def test_policy_doesnt_communicate_with_agent_in_range_if_recent_comm(self):
-        self.assertTrue(False)
+        agent_id = 0
+        other_id = 1
+        current_timestep = np.random.randint(0, 5)
+        obs_dict = self.obs_dict.copy()
+        obs_dict['agent_id'] = agent_id
+        obs_dict['agent_locs'][agent_id] = self.env.convert_loc_from_2d(3, 3)
+        obs_dict['agent_locs'][other_id] = self.env.convert_loc_from_2d(4, 3)
+        obs_dict['last_comms'] = np.zeros(default_options['num_agents'])
+        obs_dict['last_comms'][agent_id] = current_timestep
+        obs_dict['last_comms'][other_id] = current_timestep
+        obs = tuple(list(obs_dict.values()))
+        suggested_act = self.agent.policy(obs)
+        self.assertNotEqual(suggested_act, self.env.Actions.COMMUNICATE)
 
 class Test_RescueAgent(unittest.TestCase):
 
@@ -84,6 +110,7 @@ class Test_RescueAgent(unittest.TestCase):
             'agent_id': 0,
             'agent_locs': np.zeros(default_options['num_agents']),
             'victum_locs': np.ones(default_options['num_victums']).astype(int)*(-1),
+            'last_comms': np.zeros(default_options['num_agents']),
             'map_visits': np.array([
                     1,
                 1,  1,  1,

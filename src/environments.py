@@ -77,10 +77,12 @@ class SARGridWorld:
         self.agents = np.arange(0, self.num_agents)
         self.rescuers = self.agents[:self.num_rescuers]
         self.scouts = self.agents[self.num_rescuers:]
-        # inter-agent trust network
+        # agent knowledge
+        self.last_agent_communications = np.ones((self.num_agents, self.num_agents)).astype(int)*(-1)
         self.known_agent_locations = np.ones((self.num_agents, self.num_agents)).astype(int)*(-1)
         self.known_victum_locations = np.ones((self.num_agents, self.num_victums)).astype(int)*(-1)
         self.agents_carrying_victum = np.ones((self.num_agents)).astype(int)*(-1)
+        self.step_count = np.zeros((self.num_agents))
         # self.trust_matrix = np.ones((self.num_agents, self.num_agents))
         for agent in self.agents:
             self.reset_agent(agent)
@@ -163,14 +165,15 @@ class SARGridWorld:
     def reset_agent(self, agent_i):
         for space in self.movable_locations:
             self.agent_location_visits[agent_i][space] = 0
-        # format observation data
-        suggested_locs = self.known_victum_locations[agent_i]
-        visited_locs = self.agent_location_visits[agent_i]
-        carrying = False
+        self.last_agent_communications[agent_i][:] = 0
+        self.known_agent_locations[agent_i][:] = -1
+        self.known_victum_locations[agent_i][:] = -1
         # return the initial observation data
-        return agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
+        obs = self.get_observation_for_agent(agent_i)
+        return obs
     
     def step_agent(self, agent_i, action):
+        self.step_count[agent_i] += 1
         # reward is -1 normally for each timestep
         reward, done = -1, False
         # apply affects for selected action
@@ -197,7 +200,8 @@ class SARGridWorld:
                 else:
                     reward = -10 # reward is -10 for failed dropoff
             case self.Actions.COMMUNICATE:
-                self.exchange_data_with_agents_in_range(agent_i)
+                if not self.attempt_agent_communicate(agent_i):
+                    reward = -10 # reward is -10 for failed communication
             case _:
                 pass
         # update state space for selected action
@@ -215,9 +219,10 @@ class SARGridWorld:
     def get_observation_for_agent(self, agent_i):
         known_victum_locs = self.known_victum_locations[agent_i]
         known_agent_locs = self.known_agent_locations[agent_i]
-        visit_log = self.cell_visits_in_range(agent_i)
+        last_agent_comms = self.last_agent_communications[agent_i]
+        observed_area = self.cell_visits_in_range(agent_i)
         carrying = self.check_agent_carrying_victum(agent_i)
-        obs = agent_i, known_agent_locs, known_victum_locs, visit_log, carrying, self.goals
+        obs = agent_i, known_agent_locs, known_victum_locs, last_agent_comms, observed_area, carrying, self.goals
         return obs
 
     def update_data_for_victums_in_range(self, agent_i):
@@ -234,14 +239,22 @@ class SARGridWorld:
             agent_loc = self.agent_locations[agent]
             self.known_agent_locations[agent_i, agent] = agent_loc
 
-    def exchange_data_with_agents_in_range(self, agent_i):
+    def attempt_agent_communicate(self, agent_i):
         # check for other agents in range
-        agents_in_range = self.agents_in_range(agent_i)
+        in_range_agents = self.agents_in_range(agent_i)
         # exchange info automatically
-        for agent in agents_in_range:
-            if agent_i != agent:
-                self.known_victum_locations[agent_i] = self.known_victum_locations[agent]
-                # self.agent_location_visits[agent_i] = np.add(self.agent_location_visits[agent_i], self.agent_location_visits[agent])
+        result = False
+        for other in in_range_agents:
+            if agent_i != other:
+                self.exchange_victum_data(agent_i, other)
+                self.last_agent_communications[agent_i][other] = self.step_count[agent_i]
+                result = True
+        return result
+            
+    def exchange_victum_data(self, agent: int, other: int):
+        for i, vic_loc in enumerate(self.known_victum_locations[agent]):
+            if vic_loc < 0:
+                self.known_victum_locations[agent][i] = self.known_victum_locations[other][i]
 
     def check_agent_carrying_victum(self, agent_i):
         carrying_vic = self.agents_carrying_victum[agent_i]
@@ -348,7 +361,7 @@ class SARGridWorld:
             i += 1
 
     def render_agent_perception_at_index(self, agent_i, i):
-        x_block_size = 200
+        x_block_size = 100
         y_block_size = 100
         known_agent_locations = self.known_agent_locations[agent_i]
         known_victum_locations = self.known_victum_locations[agent_i]
@@ -424,7 +437,6 @@ class SARGridWorld:
         textRect.center = x, y
         # draw the text to the screen
         self.screen.blit(text, textRect)
-
 
     def set_agent_1d_loc(self, agent_i, loc):
         self.agent_locations[agent_i] = loc

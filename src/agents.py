@@ -25,14 +25,26 @@ class ScoutAgent(Agent):
         #'LEFT', 'DOWN', 'UP', 'RIGHT', 'COMMUNICATE'
         self.A = env.get_scout_actions()
         self.env = env
+        self.communication_delay = 10 # min time steps between successive communication attempts
 
     #obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     def policy(self, obs):
-        id, agent_locs, victum_loc_suggestions, visited, carrying, goals = obs
+        id, agent_locs, victum_loc_suggestions, last_comms, visited, carrying, goals = obs
 
-        action_visit_counts = self.get_action_visit_counts(visited)
-        best_action = self.A[self.random_argmin(action_visit_counts)]
+        best_action = 0
+        if self.should_communicate(id, agent_locs, last_comms):
+            best_action = SARGridWorld.Actions.COMMUNICATE
+        else:
+            action_visit_counts = self.get_action_visit_counts(visited)
+            best_action = self.A[self.random_argmin(action_visit_counts)]
         return best_action
+
+    def should_communicate(self, agent_i, agent_locs: np.array, last_coms: np.array):
+        for i, loc in enumerate(agent_locs):
+            time_since_comm = last_coms[agent_i] - last_coms[i]
+            if i != agent_i and time_since_comm > self.communication_delay:
+                return True
+        return False
 
     def get_action_visit_counts(self, visited):
         # for vis_range 2, agent pos is at index 6 in visible range
@@ -58,7 +70,7 @@ class RescueAgent(ScoutAgent):
     
     #obs = agent_i, self.agent_locations, suggested_locs, visited_locs, carrying, self.goals
     def policy(self, obs):
-        id, agent_locs, suggested_locs, visited, carrying, goals = obs
+        id, agent_locs, suggested_locs, last_comms, visited, carrying, goals = obs
         loc = agent_locs[id]
         
         if carrying:
