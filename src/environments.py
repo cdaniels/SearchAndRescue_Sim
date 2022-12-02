@@ -244,9 +244,9 @@ class SARGridWorld:
     def update_data_for_agents_in_range(self, agent_i):
         # check for agents in range
         agents_in_range = self.agents_in_range(agent_i)
-        for agent in agents_in_range:
-            agent_loc = self.agent_locations[agent]
-            self.known_agent_locations[agent_i, agent] = agent_loc
+        for other in agents_in_range:
+            other_loc = self.agent_locations[other]
+            self.known_agent_locations[agent_i, other] = other_loc
 
     def attempt_agent_communicate(self, agent_i):
         # check for other agents in range
