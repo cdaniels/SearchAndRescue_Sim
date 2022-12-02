@@ -593,6 +593,19 @@ class Test_Environment(unittest.TestCase):
         # the rescuer should now have registered a communication one step later
         self.assertEqual(last_agent_comm[rescuer], old_step_count + 1)
 
+    def test_agent_last_cumminacation_with_itself_updates_with_each_step(self):
+        # select a scout and a rescuer
+        agent = np.random.choice(self.scouts)
+        right_act = SARGridWorld.Actions.RIGHT
+        old_step_count = self.env.last_agent_communications[agent][agent]
+
+        # perform the communication action
+        obs, _, _ = self.env.step_agent(agent, right_act)
+        _, _, _, last_agent_comm, _, _, _ = obs 
+
+        # the agent should now have registered a communication one step later
+        self.assertEqual(last_agent_comm[agent], old_step_count + 1)
+
     def test_convert_loc_returns_int(self):
         # convert function should even convert float coordinates to ints
         loc_1d = self.env.convert_loc_from_2d(0.0, 1.0)

@@ -99,6 +99,19 @@ class Test_ScoutAgent(unittest.TestCase):
         suggested_act = self.agent.policy(obs)
         self.assertNotEqual(suggested_act, self.env.Actions.COMMUNICATE)
 
+
+    def test_policy_doesnt_communicate_itself(self):
+        agent_id = 0
+        current_timestep = np.random.randint(0, 5)
+        obs_dict = self.obs_dict.copy()
+        obs_dict['agent_id'] = agent_id
+        obs_dict['agent_locs'][agent_id] = self.env.convert_loc_from_2d(3, 3)
+        obs_dict['last_comms'] = np.zeros(default_options['num_agents'])
+        obs_dict['last_comms'][agent_id] = current_timestep
+        obs = tuple(list(obs_dict.values()))
+        suggested_act = self.agent.policy(obs)
+        self.assertNotEqual(suggested_act, self.env.Actions.COMMUNICATE)
+
 class Test_RescueAgent(unittest.TestCase):
 
     def setUp(self) -> None:

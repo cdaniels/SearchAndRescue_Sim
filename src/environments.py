@@ -2,9 +2,9 @@ import numpy as np
 from enum import Enum
 import time
 
-import pygame
 import math
 from src.map_factory import ImageGridFactory, SimpleGridFactory
+from src.display import DisplayVisitor
 
 default_options = {
     'screen_size': 100,
@@ -21,27 +21,14 @@ default_options = {
 }
 
 """
-TODO (extract class from render code)
 TODO (extract class from perception data)
 TODO (extract class from specific grid code)
-TODO (refactor render class to use visitor pattern on grid and perception)
 TODO add descriptions to each class/function
 TODO implement adjustable scout and rescuer speeds
 """
 
-# color
-WHITE = (255, 255, 255)
-BLACK = (0,0,0)
-RED = (200,0,0)
-YELLOW = (255, 255, 0)
-PURPLE = (255, 0, 255)
-BLUE = (0, 0, 255)
-GREEN = (0, 255, 0)
-
-   
-
 class SARGridWorld:
-    Actions = Enum('Actions', ['LEFT', 'DOWN', 'UP', 'RIGHT', 'COMMUNICATE', 'PICKUP', 'DROPOFF'])
+    Actions = Enum('Actions', ['LEFT', 'DOWN', 'UP', 'RIGHT', 'COMMUNICATE', 'REASSESS', 'PICKUP', 'DROPOFF'])
 
     def __init__(self, options) -> None:
         # unpack the options
@@ -51,7 +38,7 @@ class SARGridWorld:
 
         # initialize pygame if appropriate
         if self.render_mode == 'human':
-            self.init_pygame()
+            self.display = DisplayVisitor(options)
 
     def build_grid(self):
         # by default create a grid world of the appropriate size
@@ -98,12 +85,7 @@ class SARGridWorld:
 
     def __del__(self):
         # close pygame if it was opened
-        self.stop_simulation()
-
-    def stop_simulation(self):
-        if self.render_mode == 'human':
-            pygame.display.quit()
-            pygame.quit()
+        self.display.stop_simulation()
     
     def get_scout_actions(self):
         return [self.Actions.LEFT, self.Actions.DOWN, self.Actions.UP, self.Actions.RIGHT, self.Actions.COMMUNICATE]
@@ -112,13 +94,6 @@ class SARGridWorld:
     def get_rescuer_actions(self):
         return [self.Actions.LEFT, self.Actions.DOWN, self.Actions.UP, self.Actions.RIGHT, self.Actions.COMMUNICATE, self.Actions.PICKUP, self.Actions.DROPOFF]
         # return [action.value for action in self.Actions]
-        
-    def init_pygame(self):
-        # setup screen
-        pygame.init()
-        self.grid2screen = self.screen_size / self.grid_size
-        self.screen = pygame.display.set_mode((self.screen_size * 2.5, self.screen_size))
-        pygame.display.set_caption('Grid World')
 
     def unpack_options(self, options):
         # apply all dictionary key-values as object properties
@@ -213,13 +188,13 @@ class SARGridWorld:
                     reward = -10 # reward is -10 for failed communication
             case _:
                 pass
+        # draw changes to screen if enabled
+        if self.render_mode == 'human':
+            self.display.visit(self)
         # update state space for selected action
         self.move_agent(agent_i, dx, dy)
         self.update_data_for_agents_in_range(agent_i)
         self.update_data_for_victums_in_range(agent_i)
-        # draw changes to screen if enabled
-        if self.render_mode == 'human':
-            self.render()
         # format observation data
         obs = self.get_observation_for_agent(agent_i)
         # return the observation, reward, and termitation state
@@ -247,6 +222,8 @@ class SARGridWorld:
         for other in agents_in_range:
             other_loc = self.agent_locations[other]
             self.known_agent_locations[agent_i, other] = other_loc
+        # update the agents own last communication value (since the agent is always communicating with itself)
+        self.last_agent_communications[agent_i][agent_i] = self.step_count[agent_i]
 
     def attempt_agent_communicate(self, agent_i):
         # check for other agents in range
@@ -257,6 +234,7 @@ class SARGridWorld:
             if agent_i != other:
                 self.exchange_victum_data(agent_i, other)
                 self.last_agent_communications[agent_i][other] = self.step_count[agent_i]
+                self.last_agent_communications[other][agent_i] = self.step_count[agent_i]
                 result = True
         return result
             
@@ -331,121 +309,6 @@ class SARGridWorld:
             self.agent_location_visits[agent_i][loc] += 1
         # sum all the visits for a global value
         self.location_visits = np.sum(self.agent_location_visits, axis=0)
-    
-    def render(self):
-        self.render_grid()
-        self.render_perception_data()
-        self.update_screen()
-    
-    def render_grid(self):
-        # fill the display buffor on the screen
-        self.screen.fill(BLACK)
-        # draw the empty spaces
-        for space in self.movable_locations:
-            visit_count = int(self.location_visits[space])
-            grey_color = self.grey_scale_for_visit_count(visit_count)
-            self.draw_color_at_cell(grey_color, space)
-        # draw the agents, victums, and goals in the display buffer
-        for goal in self.goals:
-            self.draw_color_at_cell(GREEN, goal)
-        for victum_loc in self.victum_locations:
-            self.draw_color_at_cell(RED, victum_loc)
-        for scout_i in self.scouts:
-            loc = self.agent_locations[scout_i]
-            self.draw_color_at_cell(YELLOW, loc)
-        for rescuer_i in self.rescuers:
-            loc = self.agent_locations[rescuer_i]
-            if self.agents_carrying_victum[rescuer_i] >= 0:
-                self.draw_color_at_cell(PURPLE, loc)
-            else:
-                self.draw_color_at_cell(BLUE, loc)
-        
-    def render_perception_data(self):
-        i = 0
-        for scout in self.scouts:
-            self.render_agent_perception_at_index(scout, i)
-            i += 1
-        for rescuer in self.rescuers:
-            self.render_agent_perception_at_index(rescuer, i)
-            i += 1
-
-    def render_agent_perception_at_index(self, agent_i, i):
-        x_block_size = 100
-        y_block_size = 100
-        known_agent_locations = self.known_agent_locations[agent_i]
-        known_victum_locations = self.known_victum_locations[agent_i]
-        x_margin = 100
-        y_margin = 50
-        x_offset = x_margin + self.screen_size + ((i*x_block_size) % (self.screen_size))
-        y_offset = y_margin + y_block_size * (i*y_block_size // (self.screen_size))
-        self.draw_text_at_position(str(known_agent_locations), x_offset, y_offset)
-        self.draw_text_at_position(str(known_victum_locations), x_offset, y_offset + 20)
-        self.draw_observed_area(agent_i, x_offset, y_offset + 40)
-        
-    
-    def get_row_sizes_for_visible_range(self, vis_range):
-        row_sizes = np.array([1])
-        if vis_range > 0:
-            row_sizes = np.array([(2*n+1) for n in range(0, vis_range + 1)])
-            row_sizes = np.append(row_sizes, np.flip(row_sizes[0:-1]))
-        return row_sizes
-        
-    def draw_observed_area(self, agent, x, y):
-        visible_range = self.rescuer_visible_range if agent in self.rescuers else self.scout_visible_range
-        visible_area = self.cell_visits_in_range(agent)
-        scale = 10
-        start = 0
-        end = 0
-        row_sizes = self.get_row_sizes_for_visible_range(visible_range)
-        for i, row_size in enumerate(row_sizes):
-            end = end + row_size
-            cell_row = visible_area[start:end]
-            x_shift = (row_size-1) // 2
-            self.draw_cell_row(cell_row, x-(x_shift*scale), y+(i*scale), scale)
-            start = end
-
-    def draw_cell_row(self, cells, x, y, scale):
-        for i, cell_visits in enumerate(cells):
-            color = self.grey_scale_for_visit_count(cell_visits)
-            self.draw_color_square_at_position(color, scale, x+(i*scale), y)
-        
-    def update_screen(self):
-        # flip the display buffer to make it visible on the screen
-        pygame.display.flip()
-        # delay so step is clearly visible
-        if self.render_delay > 0:
-            time.sleep(self.render_delay)
-
-    def grey_scale_for_visit_count(self, visit_count):
-        grey_scale = 255
-        if visit_count > 0 and visit_count < 255:
-            grey_scale = 255 - visit_count*10 
-        return (grey_scale, grey_scale, grey_scale)
-
-    def draw_color_at_cell(self, color, loc):
-        padding = 0
-        scale = self.grid2screen
-        x, y = self.convert_loc_to_2d(loc)
-        # scale the x,= values to the screen size
-        x *= scale
-        y *= scale
-        # shift the x value to the grid location
-        x += padding
-        # draw the square
-        self.draw_color_square_at_position(color, scale, x, y)
-
-    def draw_color_square_at_position(self, color, length: int, x: int, y: int):
-        square = pygame.Rect(x, y, length, length)
-        pygame.draw.rect(self.screen, color, square)
-
-    def draw_text_at_position(self, text: str, x: int, y: int):
-        # create a text surface object,
-        font = pygame.font.Font('freesansbold.ttf', 10)
-        text = font.render(text, True, GREEN, BLACK)
-        textRect = text.get_rect()
-        textRect.center = x, y
-        # draw the text to the screen
-        self.screen.blit(text, textRect)
 
     def set_agent_1d_loc(self, agent_i, loc):
         self.agent_locations[agent_i] = loc

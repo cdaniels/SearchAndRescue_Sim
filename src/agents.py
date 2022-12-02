@@ -40,10 +40,10 @@ class ScoutAgent(Agent):
         return best_action
 
     def should_communicate(self, agent_i, agent_locs: np.array, last_coms: np.array):
-        for i, loc in enumerate(agent_locs):
-            time_since_comm = last_coms[agent_i] - last_coms[i]
-            if i != agent_i and time_since_comm > self.communication_delay:
-                return True
+        # for i, loc in enumerate(agent_locs):
+        #     time_since_comm = np.abs(last_coms[agent_i] - last_coms[i])
+        #     if i != agent_i and time_since_comm > self.communication_delay:
+        #         return True
         return False
 
     def get_action_visit_counts(self, visited):
