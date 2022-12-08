@@ -27,18 +27,7 @@ TODO add descriptions to each class/function
 TODO implement adjustable scout and rescuer speeds
 """
 
-class SARGridWorld:
-    Actions = Enum('Actions', ['LEFT', 'DOWN', 'UP', 'RIGHT', 'COMMUNICATE', 'REASSESS', 'PICKUP', 'DROPOFF'])
-
-    def __init__(self, options) -> None:
-        # unpack the options
-        self.unpack_options(options)
-        grid = self.build_grid()
-        self.populate_grid(grid.flatten())
-
-        # initialize pygame if appropriate
-        if self.render_mode == 'human':
-            self.display = DisplayVisitor(options)
+class GridWorld:
 
     def build_grid(self):
         # by default create a grid world of the appropriate size
@@ -49,6 +38,47 @@ class SARGridWorld:
         else:
             grid = SimpleGridFactory.load_grid(self.grid_size, self.scout_visible_range)
         return grid
+
+    def cells_in_range(self, agent_i):
+        # get the agent location
+        agent_loc = self.agent_locations[agent_i]
+        # test for cells within range then add them to list
+        cells_in_range = list()
+        visible_range = self.rescuer_visible_range if agent_i in self.rescuers else self.scout_visible_range
+        for loc, occupied in enumerate(self.world):
+            dist = self.manhatten_distance(loc, agent_loc)
+            if dist <= visible_range:
+                cells_in_range.append(loc)
+        return cells_in_range
+
+    def manhatten_distance(self, loc1, loc2):
+        loc1_2d = self.convert_loc_to_2d(loc1)
+        loc2_2d = self.convert_loc_to_2d(loc2)
+        return sum(abs(value1 - value2) for value1, value2 in zip(loc1_2d, loc2_2d))
+
+    def convert_loc_to_2d(self, loc):
+        x = int(loc % self.grid_size)
+        y = int(loc // self.grid_size)
+        return x, y
+
+    def convert_loc_from_2d(self, x, y):
+        loc_1d = int(y * self.grid_size + x)
+        return loc_1d
+
+
+class SARGridWorld(GridWorld):
+    Actions = Enum('Actions', ['LEFT', 'DOWN', 'UP', 'RIGHT', 'COMMUNICATE', 'REASSESS', 'PICKUP', 'DROPOFF'])
+
+    def __init__(self, options) -> None:
+        # unpack the options
+        self.unpack_options(options)
+        grid = self.build_grid()
+        self.populate_grid(grid.flatten())
+        self.initialize_agent_data()
+
+        # initialize pygame if appropriate
+        if self.render_mode == 'human':
+            self.display = DisplayVisitor(options)
 
     def populate_grid(self, grid):
         # grid representing world 0 wall, 1 movable
@@ -69,6 +99,8 @@ class SARGridWorld:
         # self.victum_locations = np.array([np.random.choice(self.movable_locations) for _ in range(self.num_victums)])
         self.victum_locations = np.array([np.random.choice(self.accident_locations) for _ in range(self.num_victums)])
         self.agent_locations = np.array([np.random.choice(self.starts) for _ in range(self.num_agents)])
+
+    def initialize_agent_data(self):
         # simple arrays for rescuers and scouts
         self.agents = np.arange(0, self.num_agents)
         self.rescuers = self.agents[:self.num_rescuers]
@@ -79,7 +111,6 @@ class SARGridWorld:
         self.known_victum_locations = np.ones((self.num_agents, self.num_victums)).astype(int)*(-1)
         self.agents_carrying_victum = np.ones((self.num_agents)).astype(int)*(-1)
         self.step_count = np.zeros((self.num_agents))
-        # self.trust_matrix = np.ones((self.num_agents, self.num_agents))
         for agent in self.agents:
             self.reset_agent(agent)
 
@@ -99,11 +130,6 @@ class SARGridWorld:
         # apply all dictionary key-values as object properties
         for option in options:
             setattr(self, option, options[option])
-
-    def manhatten_distance(self, loc1, loc2):
-        loc1_2d = self.convert_loc_to_2d(loc1)
-        loc2_2d = self.convert_loc_to_2d(loc2)
-        return sum(abs(value1 - value2) for value1, value2 in zip(loc1_2d, loc2_2d))
 
     def agents_in_range(self, agent_i):
         # test for agents within range then add them to list
@@ -128,18 +154,6 @@ class SARGridWorld:
             for vic_i, loc in enumerate(self.victum_locations):
                 if loc == cell: victums_in_range.append(vic_i)
         return victums_in_range
-
-    def cells_in_range(self, agent_i):
-        # get the agent location
-        agent_loc = self.agent_locations[agent_i]
-        # test for cells within range then add them to list
-        cells_in_range = list()
-        visible_range = self.rescuer_visible_range if agent_i in self.rescuers else self.scout_visible_range
-        for loc, occupied in enumerate(self.world):
-            dist = self.manhatten_distance(loc, agent_loc)
-            if dist <= visible_range:
-                cells_in_range.append(loc)
-        return cells_in_range
 
     def cell_visits_in_range(self, agent_i):
         cells = self.cells_in_range(agent_i)
@@ -336,11 +350,3 @@ class SARGridWorld:
         grid_loc_2d = np.array([x, y])
         return grid_loc_2d
 
-    def convert_loc_to_2d(self, loc):
-        x = int(loc % self.grid_size)
-        y = int(loc // self.grid_size)
-        return x, y
-
-    def convert_loc_from_2d(self, x, y):
-        loc_1d = int(y * self.grid_size + x)
-        return loc_1d
