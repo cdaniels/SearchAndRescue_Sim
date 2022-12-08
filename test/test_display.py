@@ -35,5 +35,21 @@ class Test_Display(unittest.TestCase):
     def test_display(self):
         self.assertEqual(True, False)
 
+    def test_calculates_propper_number_of_rows_for_visible_range(self):
+        vis_ranges = np.arange(0,5)
+        # rows should be of length, 1, 3, 5, 7, ...
+        for i, vis_range in enumerate(vis_ranges):
+            row_sizes = self.display.get_row_sizes_for_visible_range(vis_range)
+            self.assertEqual(len(row_sizes), (2*i+1))
+
+    def test_calculates_propper_row_sizes_for_visible_range(self):
+        vis_range = 2
+        row_sizes = self.display.get_row_sizes_for_visible_range(vis_range)
+        self.assertEqual(row_sizes[0], 1)
+        self.assertEqual(row_sizes[1], 3)
+        self.assertEqual(row_sizes[2], 5)
+        self.assertEqual(row_sizes[3], 3)
+        self.assertEqual(row_sizes[4], 1)
+
 if __name__ == '__main__':
     unittest.main()
